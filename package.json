@@ -33,7 +33,7 @@
     "mac": {
       "target": [
         {
-          "target": "dmg",
+          "target": "zip",
           "arch": ["x64", "arm64"]
         }
       ],
@@ -46,9 +46,8 @@
     "portable": {
       "artifactName": "SEEBAL-Reels-Windows.exe"
     },
-    "dmg": {
-      "artifactName": "SEEBAL-Reels-Mac.dmg",
-      "title": "SEEBAL Reels"
+    "mac": {
+      "artifactName": "SEEBAL-Reels-Mac-${arch}.zip"
     }
   },
   "devDependencies": {
