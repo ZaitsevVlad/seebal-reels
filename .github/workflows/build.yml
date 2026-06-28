@@ -1,62 +1,99 @@
-name: Build SEEBAL Reels
+name: Build & Release SEEBAL Reels
 
 on:
-  push:
-    branches: [ main, master ]
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Версия (например: 1.2.0)'
+        required: true
+        default: '1.0.0'
+      release_notes:
+        description: 'Описание обновления (что нового)'
+        required: false
+        default: 'Новая версия SEEBAL Reels'
+
+permissions:
+  contents: write
 
 jobs:
   build-windows:
-    name: 🪟 Windows (portable EXE)
+    name: 🪟 Windows
     runs-on: windows-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build Windows portable
-        run: npm run dist:win
-
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
+      - run: npm install
+      - run: npm run dist:win
+      - uses: actions/upload-artifact@v4
         with:
-          name: SEEBAL-Reels-Windows
+          name: win-artifact
           path: dist/SEEBAL-Reels-Windows.exe
-          retention-days: 30
 
   build-mac:
-    name: 🍎 macOS (Universal DMG)
+    name: 🍎 macOS
     runs-on: macos-14
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build macOS Universal DMG
-        run: npm run dist:mac
+      - run: npm install
+      - run: npm run dist:mac
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: true
-
-      - name: Upload macOS artifact (Universal — Intel + Apple Silicon)
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: SEEBAL-Reels-Mac
+          name: mac-artifact
           path: dist/SEEBAL-Reels-Mac-universal.zip
-          retention-days: 30
+
+  release:
+    name: 🚀 Создать релиз
+    needs: [build-windows, build-mac]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Скачать Windows артефакт
+        uses: actions/download-artifact@v4
+        with:
+          name: win-artifact
+          path: ./release-files
+
+      - name: Скачать macOS артефакт
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-artifact
+          path: ./release-files
+
+      - name: Создать GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          name: "SEEBAL Reels v${{ github.event.inputs.version }}"
+          body: |
+            ## 📥 Скачать
+
+            | Платформа | Файл |
+            |-----------|------|
+            | 🪟 Windows | `SEEBAL-Reels-Windows.exe` — просто запусти |
+            | 🍎 macOS | `SEEBAL-Reels-Mac-universal.zip` — разархивируй, перетащи в Applications |
+
+            ---
+
+            ## 📝 Что нового
+
+            ${{ github.event.inputs.release_notes }}
+
+            ---
+
+            > **Mac:** при первом запуске правый клик → Open → Open
+          files: |
+            ./release-files/SEEBAL-Reels-Windows.exe
+            ./release-files/SEEBAL-Reels-Mac-universal.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
