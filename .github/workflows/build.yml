@@ -34,7 +34,7 @@ jobs:
 
   build-mac:
     name: 🍎 macOS (Universal DMG)
-    runs-on: macos-13
+    runs-on: macos-14
     steps:
       - name: Checkout
         uses: actions/checkout@v4
