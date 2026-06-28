@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SSIBAL REELS clean</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span>SSIBAL</span><em>REELS</em><small>beta</small></div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="feed">Обзор</button>
+      <button class="tab" data-tab="profiles">Профили</button>
+      <button class="tab" data-tab="support">Взаимопомощь</button>
+      <button class="tab" data-tab="myLikes">Мои лайки</button>
+      <button class="tab" data-tab="siteLikes">Лайкают пользователи</button>
+    </nav>
+    <div class="actions">
+      <span id="status" class="status">checking</span>
+      <button id="refreshBtn" class="icon-btn" title="Refresh">↻</button>
+      <button id="folderBtn" class="icon-btn" title="Download folder">⌂</button>
+      <button id="logBtn" class="icon-btn" title="Open log">!</button>
+      <button id="loginBtn">Instagram</button>
+    </div>
+  </header>
+  <main>
+    <section class="toolbar">
+      <button id="backBtn" hidden>Back</button>
+      <span id="counter">0 reels</span>
+      <span id="profileLabel"></span>
+      <span id="folderLabel"></span>
+      <span id="message"></span>
+    </section>
+    <section id="grid" class="grid"></section>
+    <div id="sentinel" class="sentinel">loading</div>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>
