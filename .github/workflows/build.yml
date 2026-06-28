@@ -46,10 +46,18 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: true
+      - name: Упаковать .app + лаунчер в один архив
+        run: |
+          mkdir -p ./mac-release
+          cp -R "dist/mac-universal/SEEBAL Reels.app" ./mac-release/
+          cp scripts/mac-launcher.command "./mac-release/Запустить SEEBAL Reels.command"
+          chmod +x "./mac-release/Запустить SEEBAL Reels.command"
+          cd mac-release && zip -r "../SEEBAL-Reels-Mac.zip" . && cd ..
+
       - uses: actions/upload-artifact@v4
         with:
           name: mac-artifact
-          path: dist/SEEBAL-Reels-Mac-universal.zip
+          path: SEEBAL-Reels-Mac.zip
 
   release:
     name: 🚀 Создать релиз
@@ -92,7 +100,7 @@ jobs:
             > **Mac:** при первом запуске правый клик → Open → Open
           files: |
             ./release-files/SEEBAL-Reels-Windows.exe
-            ./release-files/SEEBAL-Reels-Mac-universal.zip
+            ./release-files/SEEBAL-Reels-Mac.zip
           draft: false
           prerelease: false
         env:
