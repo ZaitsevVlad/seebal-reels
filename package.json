@@ -2,11 +2,12 @@
   "name": "seebal-reels",
   "version": "1.0.0",
   "description": "SEEBAL Instagram Reels Downloader",
+  "author": "SEEBAL",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dist:win": "electron-builder --win --x64",
-    "dist:mac": "electron-builder --mac --x64 --arm64",
+    "dist:mac": "electron-builder --mac --universal",
     "dist:all": "electron-builder --win --mac --x64"
   },
   "build": {
@@ -37,6 +38,7 @@
         }
       ],
       "category": "public.app-category.social-networking",
+      "darkModeSupport": true,
       "hardenedRuntime": false,
       "gatekeeperAssess": false
     },
@@ -44,7 +46,7 @@
       "artifactName": "SEEBAL-Reels-Windows.exe"
     },
     "dmg": {
-      "artifactName": "SEEBAL-Reels-Mac-${arch}.dmg",
+      "artifactName": "SEEBAL-Reels-Mac.dmg",
       "title": "SEEBAL Reels",
       "background": null,
       "window": {
