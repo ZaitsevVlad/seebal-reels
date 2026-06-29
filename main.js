@@ -66,13 +66,9 @@ function openLoginWindow() {
       }
     });
     win.setMenuBarVisibility(false);
-    // Use a standard mobile user-agent so Instagram shows the regular login form
-    win.webContents.setUserAgent(
-      'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1'
-    );
-    win.loadURL('https://www.instagram.com/accounts/login/', {
-      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1'
-    });
+    // Use the same desktop Chrome UA as API requests — session is tied to UA
+    win.webContents.setUserAgent(UA);
+    win.loadURL('https://www.instagram.com/accounts/login/');
 
     let closed = false;
     let pollTimer = null;
@@ -863,9 +859,48 @@ ipcMain.handle('debug:open-log', async () => {
   return true;
 });
 
+// ─── Session Keepalive ────────────────────────────────
+// Ping Instagram every 15 min while logged in to refresh session cookies
+// and prevent them from expiring during inactivity
+let keepaliveTimer = null;
+
+async function sessionKeepalive() {
+  try {
+    const loggedIn = await checkLoggedIn();
+    if (!loggedIn) return; // not logged in — nothing to keep alive
+    const cookie = await getIGCookies();
+    const csrf = await getCSRFToken();
+    const response = await net.fetch(
+      'https://www.instagram.com/api/v1/accounts/current_user/?edit=true',
+      {
+        headers: {
+          'User-Agent': UA,
+          'Cookie': cookie,
+          'X-IG-App-ID': IG_APP_ID,
+          'X-CSRFToken': csrf,
+          'Accept': '*/*',
+          'Referer': 'https://www.instagram.com/'
+        }
+      }
+    );
+    console.log(`[Keepalive] Instagram session ping → ${response.status}`);
+  } catch (e) {
+    console.warn('[Keepalive] Ping failed (will retry in 15m):', e.message);
+  }
+}
+
 app.whenReady().then(() => {
   createMainWindow();
+  // Start keepalive 30s after launch, then every 15 minutes
+  setTimeout(() => {
+    sessionKeepalive();
+    keepaliveTimer = setInterval(sessionKeepalive, 15 * 60 * 1000);
+  }, 30 * 1000);
 });
 
-app.on('window-all-closed', () => { stopAllMonitoring(); app.quit(); });
+app.on('window-all-closed', () => {
+  stopAllMonitoring();
+  if (keepaliveTimer) clearInterval(keepaliveTimer);
+  app.quit();
+});
 app.on('activate', () => { if (!mainWindow) createMainWindow(); });

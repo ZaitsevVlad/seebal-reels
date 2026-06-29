@@ -327,8 +327,15 @@ async function loadMore(reset = false) {
   }
   try {
     if (!(await updateAuth())) {
-      setMessage('Нужно войти в Instagram', true);
-      return;
+      // Session expired silently — auto re-login without bothering the user
+      setSentinel('');
+      const ok = await window.api.login();
+      await updateAuth();
+      if (!ok) {
+        setMessage('Нужно войти в Instagram', true);
+        setSentinel('error');
+        return;
+      }
     }
     const data = state.mode === 'profile'
       ? await window.api.getUserReels(state.profile.id, state.cursor)
@@ -353,6 +360,26 @@ async function loadMore(reset = false) {
       setTimeout(() => loadMore(false), 150);
     }
   } catch (error) {
+    // If session expired during the request — auto re-login
+    if (error?.code === 'IG_AUTH' || error?.message?.includes('авторизацию') || error?.message?.includes('login')) {
+      setSentinel('');
+      setMessage('Сессия истекла, вход в Instagram...');
+      try {
+        const ok = await window.api.login();
+        await updateAuth();
+        if (ok && runId === state.runId) {
+          setMessage('');
+          loadMore(reset); // retry
+        } else {
+          setMessage('Нужно войти в Instagram', true);
+          setSentinel('error');
+        }
+      } catch (_) {
+        setMessage('Нужно войти в Instagram', true);
+        setSentinel('error');
+      }
+      return;
+    }
     setMessage(error.message || String(error), true);
     setSentinel('error');
   } finally {
