@@ -27,6 +27,7 @@ const state = {
   supportRequests: JSON.parse(localStorage.getItem('supportRequests') || '[]'),
   myLikes: JSON.parse(localStorage.getItem('myLikes') || '[]'),
   siteLikes: JSON.parse(localStorage.getItem('siteLikes') || '[]'),
+  blockedAuthors: new Set(JSON.parse(localStorage.getItem('blockedAuthors') || '[]')),
   profileReturn: 'feed',
   reelHost: grid,
   authOk: false,
@@ -58,6 +59,22 @@ function saveLocalLists() {
   localStorage.setItem('siteLikes', JSON.stringify(state.siteLikes));
   localStorage.setItem('supportAccounts', JSON.stringify(state.supportAccounts));
   localStorage.setItem('supportRequests', JSON.stringify(state.supportRequests));
+}
+
+function blockAuthor(username) {
+  if (!username) return;
+  const key = username.toLowerCase();
+  state.blockedAuthors.add(key);
+  localStorage.setItem('blockedAuthors', JSON.stringify([...state.blockedAuthors]));
+  // Animate-out and remove ALL visible cards from this author
+  document.querySelectorAll(`.reel[data-author="${key}"]`).forEach(card => {
+    card.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+    card.style.opacity = '0';
+    card.style.transform = 'scale(0.9)';
+    setTimeout(() => card.remove(), 260);
+  });
+  // Invalidate feed cache so blocked author won't appear on restore
+  state.feedCache = null;
 }
 
 function isLiked(reel) {
@@ -149,6 +166,9 @@ function renderReel(reel) {
   const statsText = Number(reel.viewCount || 0) > 0
     ? `${formatNumber(reel.viewCount)} views`
     : `${formatNumber(reel.likeCount)} likes · ${formatNumber(reel.commentCount)} comments`;
+  const authorKey = (reel.author?.username || '').toLowerCase();
+  card.dataset.author = authorKey;
+  const showNotInterested = state.mode === 'feed';
   card.innerHTML = `
     <div class="media">
       <img src="${reel.thumbnailUrl || ''}" loading="lazy" alt="" />
@@ -156,6 +176,7 @@ function renderReel(reel) {
       <button class="save-profile" aria-label="Save profile">+</button>
       <button class="like ${isLiked(reel) ? 'liked' : ''}" aria-label="Like">♥</button>
       ${state.mode === 'siteLikes' && state.role === 'dev' ? '<button class="delete-reel" aria-label="Delete">×</button>' : ''}
+      ${showNotInterested ? '<button class="not-interested" aria-label="Not interested" title="Не интересно — скрыть автора">✕</button>' : ''}
       <button class="download">Download</button>
     </div>
     <div class="meta">
@@ -169,6 +190,7 @@ function renderReel(reel) {
   const saveProfileBtn = card.querySelector('.save-profile');
   const likeBtn = card.querySelector('.like');
   const deleteReelBtn = card.querySelector('.delete-reel');
+  const notInterestedBtn = card.querySelector('.not-interested');
   const downloadBtn = card.querySelector('.download');
   const authorEl = card.querySelector('.meta strong');
   let video = null;
@@ -211,7 +233,11 @@ function renderReel(reel) {
     startPlayback();
   });
   media.addEventListener('click', (event) => {
-    if (event.target === downloadBtn || event.target === likeBtn || event.target === saveProfileBtn || event.target === deleteReelBtn || event.target === video || downloadBtn.contains(event.target) || likeBtn.contains(event.target) || saveProfileBtn.contains(event.target) || deleteReelBtn?.contains(event.target)) return;
+    if (event.target === downloadBtn || event.target === likeBtn || event.target === saveProfileBtn ||
+        event.target === deleteReelBtn || event.target === notInterestedBtn || event.target === video ||
+        downloadBtn.contains(event.target) || likeBtn.contains(event.target) ||
+        saveProfileBtn.contains(event.target) || deleteReelBtn?.contains(event.target) ||
+        notInterestedBtn?.contains(event.target)) return;
     startPlayback();
   });
   saveProfileBtn.addEventListener('click', async (event) => {
@@ -240,6 +266,15 @@ function renderReel(reel) {
     removeSiteLike(reel.id);
     card.remove();
     counterEl.textContent = `${state.siteLikes.length} reels`;
+  });
+  if (notInterestedBtn) notInterestedBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const username = reel.author?.username;
+    if (!username) { card.remove(); return; }
+    notInterestedBtn.textContent = '✓';
+    notInterestedBtn.style.opacity = '1';
+    blockAuthor(username);
+    setMessage(`Автор @${username} скрыт. Обновите ленту чтобы загрузить новые.`);
   });
   downloadBtn.addEventListener('click', async (event) => {
     event.stopPropagation();
@@ -274,7 +309,14 @@ async function loadMore(reset = false) {
   if (state.loading || (!state.hasMore && !reset)) return;
   const runId = state.runId;
   state.loading = true;
-  sentinel.textContent = 'loading';
+
+  // Update both global sentinel and (if in profile split-panel) the inner sentinel
+  const setSentinel = (text) => {
+    sentinel.textContent = text;
+    if (state.profileSentinel) state.profileSentinel.textContent = text;
+  };
+
+  setSentinel('loading');
   setMessage('');
   if (reset) {
     state.cursor = '';
@@ -294,6 +336,9 @@ async function loadMore(reset = false) {
     if (runId !== state.runId) return;
     for (const reel of data.items || []) {
       if (!reel.id || state.seen.has(reel.id)) continue;
+      // Skip blocked authors in feed mode
+      if (state.mode === 'feed' && reel.author?.username &&
+          state.blockedAuthors.has(reel.author.username.toLowerCase())) continue;
       state.seen.add(reel.id);
       state.count += 1;
       renderReel(reel);
@@ -302,16 +347,17 @@ async function loadMore(reset = false) {
     state.hasMore = !!data.hasMore || !!state.cursor;
     counterEl.textContent = `${state.count} reels`;
     cacheCurrentProfile();
-    sentinel.textContent = state.hasMore ? 'scroll for more' : 'end';
-    if (state.hasMore && document.documentElement.scrollHeight <= window.innerHeight + 300) {
+    setSentinel(state.hasMore ? 'scroll for more' : 'end');
+    // If not in split-panel, also auto-load if content doesn't fill screen
+    if (!state.profileScrollContainer && state.hasMore && document.documentElement.scrollHeight <= window.innerHeight + 300) {
       setTimeout(() => loadMore(false), 150);
     }
   } catch (error) {
     setMessage(error.message || String(error), true);
-    sentinel.textContent = 'error';
+    setSentinel('error');
   } finally {
     if (runId === state.runId) state.loading = false;
-    if (state.hasMore && sentinel.getBoundingClientRect().top < window.innerHeight + 1200) {
+    if (!state.profileScrollContainer && state.hasMore && sentinel.getBoundingClientRect().top < window.innerHeight + 1200) {
       setTimeout(() => loadMore(false), 150);
     }
   }
@@ -319,6 +365,16 @@ async function loadMore(reset = false) {
 
 function maybeLoadNearBottom(distance = 2200) {
   if (!['feed', 'profile'].includes(state.mode)) return;
+
+  // In split-panel (profiles tab), the scroll happens inside .profile-reels container
+  const container = state.profileScrollContainer;
+  if (container) {
+    const left = container.scrollHeight - container.clientHeight - container.scrollTop;
+    if (left < distance) loadMore(false);
+    return;
+  }
+
+  // Otherwise global scroll (feed mode)
   const left = document.documentElement.scrollHeight - window.innerHeight - window.scrollY;
   if (left < distance) loadMore(false);
 }
@@ -326,13 +382,16 @@ function maybeLoadNearBottom(distance = 2200) {
 function resetPanel(mode, title, message = '') {
   state.runId += 1;
   state.loading = false;
-  cacheCurrentProfile();
+  snapshotFeed();          // save feed before any tab switch
+  cacheCurrentProfile();   // save current profile before any tab switch
   state.mode = mode;
   state.cursor = '';
   state.hasMore = false;
   state.profile = null;
   state.seen.clear();
   state.count = 0;
+  state.profileScrollContainer = null;
+  state.profileSentinel = null;
   grid.innerHTML = '';
   grid.classList.remove('support-feed');
   setReelHost(grid);
@@ -415,13 +474,39 @@ function renderAccountForm(placeholder, onSubmit) {
 function createSplitPanel(kind) {
   const layout = document.createElement('section');
   layout.className = 'split-panel';
-  layout.innerHTML = '<aside class="account-list"></aside><section class="profile-reels"></section>';
+  // .profile-reels = scrollable container | .profile-reels-grid = card grid
+  layout.innerHTML = '<aside class="account-list"></aside><section class="profile-reels"><div class="profile-reels-grid"></div><div class="profile-sentinel sentinel"></div></section>';
   grid.appendChild(layout);
   const list = layout.querySelector('.account-list');
-  const reels = layout.querySelector('.profile-reels');
-  setReelHost(reels);
+  const reelsContainer = layout.querySelector('.profile-reels');
+  const reelsGrid = layout.querySelector('.profile-reels-grid');
+  const profileSentinel = layout.querySelector('.profile-sentinel');
+
+  // Cards are appended to the inner grid
+  setReelHost(reelsGrid);
   state.profileReturn = kind;
-  return { list, reels };
+
+  // Track the scrollable container
+  state.profileScrollContainer = reelsContainer;
+  state.profileSentinel = profileSentinel;
+
+  // Remove old scroll listener if any
+  if (state._profileScrollHandler && state._prevProfileScrollContainer) {
+    state._prevProfileScrollContainer.removeEventListener('scroll', state._profileScrollHandler);
+  }
+  state._prevProfileScrollContainer = reelsContainer;
+  state._profileScrollHandler = () => maybeLoadNearBottom(1800);
+  reelsContainer.addEventListener('scroll', state._profileScrollHandler, { passive: true });
+
+  // IntersectionObserver on the inner sentinel
+  if (state._profileSentinelObserver) state._profileSentinelObserver.disconnect();
+  state._profileSentinelObserver = new IntersectionObserver(
+    entries => { if (entries.some(e => e.isIntersecting)) loadMore(false); },
+    { root: reelsContainer, threshold: 0.01, rootMargin: '600px 0px' }
+  );
+  state._profileSentinelObserver.observe(profileSentinel);
+
+  return { list, reels: reelsGrid };
 }
 
 async function renderProfilesPanel() {
@@ -570,9 +655,17 @@ async function openProfile(username, returnTo = state.mode) {
   state.hasMore = true;
   state.seen.clear();
   state.count = 0;
+
   if (state.profileReturn === 'profiles' && state.reelHost && state.reelHost !== grid) {
+    // We're inside the split-panel — clear the inner grid, keep scroll container
     state.reelHost.innerHTML = '';
+    // profileScrollContainer and profileSentinel were set by createSplitPanel, keep them
+    // but reset sentinel text
+    if (state.profileSentinel) state.profileSentinel.textContent = 'loading profile';
   } else {
+    // Full-screen profile (from feed / support)
+    state.profileScrollContainer = null;
+    state.profileSentinel = null;
     grid.innerHTML = '';
     setReelHost(grid);
   }
@@ -630,7 +723,15 @@ loginBtn.addEventListener('click', async () => {
   await loadMore(true);
 });
 backBtn.addEventListener('click', goBack);
-refreshBtn.addEventListener('click', () => loadMore(true));
+refreshBtn.addEventListener('click', () => {
+  // Clear the appropriate cache so this is a real fresh reload
+  if (state.mode === 'profile' && state.profile?.username) {
+    state.profileCache.delete(state.profile.username.toLowerCase());
+  } else {
+    state.feedCache = null;
+  }
+  loadMore(true);
+});
 folderBtn.addEventListener('click', async () => {
   const folder = await window.api.selectDownloadFolder();
   if (folder) folderLabel.textContent = folder;

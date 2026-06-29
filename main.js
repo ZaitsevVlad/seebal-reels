@@ -55,22 +55,81 @@ async function checkLoggedIn() {
 function openLoginWindow() {
   return new Promise((resolve) => {
     const win = new BrowserWindow({
-      width: 460, height: 720,
+      width: 480, height: 780,
       parent: mainWindow, modal: true,
       title: 'Вход в Instagram',
-      webPreferences: { nodeIntegration: false, contextIsolation: true }
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        // Allow the login page to load all scripts (needed for CAPTCHA)
+        webSecurity: true
+      }
     });
     win.setMenuBarVisibility(false);
-    win.loadURL('https://www.instagram.com/accounts/login/');
+    // Use a standard mobile user-agent so Instagram shows the regular login form
+    win.webContents.setUserAgent(
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1'
+    );
+    win.loadURL('https://www.instagram.com/accounts/login/', {
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1'
+    });
 
-    const check = async (url) => {
-      if (url.includes('instagram.com') && !url.includes('/accounts/login') && !url.includes('/challenge')) {
-        if (await checkLoggedIn()) { win.close(); resolve(true); }
+    let closed = false;
+    let pollTimer = null;
+
+    // Robust cookie polling – works regardless of what URL Instagram redirects to
+    // after captcha, 2FA, challenge, or any regional variant
+    const pollLogin = async () => {
+      if (closed) return;
+      try {
+        const loggedIn = await checkLoggedIn();
+        if (loggedIn) {
+          closed = true;
+          clearInterval(pollTimer);
+          if (!win.isDestroyed()) win.close();
+          resolve(true);
+          return;
+        }
+      } catch (_) {}
+      // Keep polling every 1.5 seconds while window is open
+    };
+
+    // Also check on every navigation (fast path for simple redirects)
+    const checkOnNav = async (_e, url) => {
+      if (closed) return;
+      // Skip pages that are clearly still part of the auth flow
+      const authPages = [
+        '/accounts/login',
+        '/accounts/onetap',
+        '/challenge',
+        '/two_factor',
+        '/checkpoint',
+        '/accounts/suspended',
+        'login_attempt'
+      ];
+      const isAuthPage = authPages.some(p => url.includes(p));
+      if (!isAuthPage && url.includes('instagram.com')) {
+        // Navigation landed somewhere that isn't a login page — likely home
+        const loggedIn = await checkLoggedIn();
+        if (loggedIn && !closed) {
+          closed = true;
+          clearInterval(pollTimer);
+          if (!win.isDestroyed()) win.close();
+          resolve(true);
+        }
       }
     };
-    win.webContents.on('did-navigate', (_e, url) => check(url));
-    win.webContents.on('did-redirect-navigation', (_e, url) => check(url));
-    win.on('closed', async () => resolve(await checkLoggedIn()));
+
+    pollTimer = setInterval(pollLogin, 1500);
+    win.webContents.on('did-navigate', checkOnNav);
+    win.webContents.on('did-redirect-navigation', checkOnNav);
+    win.on('closed', async () => {
+      if (!closed) {
+        closed = true;
+        clearInterval(pollTimer);
+        resolve(await checkLoggedIn());
+      }
+    });
   });
 }
 
@@ -330,81 +389,65 @@ async function enrichReelMetrics(items) {
 }
 
 async function getUserReels(userId, cursor = '') {
-  const batchedItems = new Map();
-  let batchedCursor = cursor;
-  let batchedHasMore = true;
-
-  for (let page = 0; page < 5 && batchedItems.size < 10 && batchedHasMore; page++) {
-    const query = new URLSearchParams({ count: '50' });
-    if (batchedCursor) query.set('max_id', batchedCursor);
-    const data = await fetchIG(`https://www.instagram.com/api/v1/feed/user/${encodeURIComponent(userId)}/?${query}`);
-    const videos = (data.items || [])
-      .filter(item => item.product_type === 'clips' || item.media_type === 2 || item.video_versions?.length)
-      .map(parseReelItem);
-
-    for (const item of videos) batchedItems.set(String(item.id), item);
-
-    const previousCursor = batchedCursor;
-    batchedCursor = data.next_max_id || '';
-    batchedHasMore = !!data.more_available && !!batchedCursor && batchedCursor !== previousCursor;
-  }
-
-  return { items: [...batchedItems.values()], hasMore: batchedHasMore, cursor: batchedCursor };
-
-  // Helper: resolve username from cache or saved accounts
-  function resolveUsername() {
-    for (const [uname, data] of userInfoCache.entries()) {
-      if (String(data.user.id) === String(userId)) return uname;
-    }
-    const saved = getSetting('savedAccounts', []).find(a => String(a.userId) === String(userId));
-    return saved?.username || '';
-  }
-
-  // The regular user feed is independent from the rate-limited web profile endpoint.
-  async function feedFallback() {
-    const query = new URLSearchParams({ count: '50' });
-    if (cursor) query.set('max_id', cursor);
-    const d2 = await fetchIG(`https://www.instagram.com/api/v1/feed/user/${encodeURIComponent(userId)}/?${query}`);
-    const media = d2.items || [];
-    const items = media
-      .filter(item => item.product_type === 'clips' || item.media_type === 2 || item.video_versions?.length)
-      .map(parseReelItem);
-    return { items, hasMore: !!d2.more_available, cursor: d2.next_max_id || '' };
-  }
-
-  try {
+  // Strategy 1: clips/user POST – returns only Reels (most accurate)
+  const tryClips = async (cur) => {
     const params = new URLSearchParams({
-      target_user_id: userId,
-      page_size: '50',
+      target_user_id: String(userId),
+      page_size: '12',
       include_feed_video: 'true'
     });
-    if (cursor) params.append('max_id', cursor);
-
+    if (cur) params.append('max_id', cur);
     const d = await fetchIG('https://i.instagram.com/api/v1/clips/user/', 'POST', params.toString());
-    const items = (d.items || []).map(parseReelItem);
-
-    // Some sessions return an empty clips response but still expose media via user feed.
-    if (items.length === 0 && !cursor) {
-      try {
-        const fallback = await feedFallback();
-        if (fallback.items.length > 0) return fallback;
-      } catch (fbErr) {
-        console.warn('[IG API] user feed fallback returned nothing:', fbErr.message);
-      }
-    }
-
+    const items = (d.items || []).map(parseReelItem).filter(i => i.videoUrl);
     return {
       items,
       hasMore: !!d.paging_info?.more_available,
       cursor: d.paging_info?.max_id || ''
     };
+  };
+
+  // Strategy 2: feed/user GET – returns all media, we filter for videos/reels
+  const tryFeed = async (cur) => {
+    const query = new URLSearchParams({ count: '50' });
+    if (cur) query.set('max_id', cur);
+    const d = await fetchIG(`https://www.instagram.com/api/v1/feed/user/${encodeURIComponent(userId)}/?${query}`);
+    const items = (d.items || [])
+      .filter(item => item.media_type === 2 || item.product_type === 'clips' || item.video_versions?.length > 0)
+      .map(parseReelItem)
+      .filter(i => i.videoUrl);
+    return {
+      items,
+      hasMore: !!d.more_available && !!(d.next_max_id),
+      cursor: d.next_max_id || ''
+    };
+  };
+
+  // Try clips first, fall back to feed
+  let clipsResult = null;
+  let clipsError = null;
+  try {
+    clipsResult = await tryClips(cursor);
   } catch (e) {
-    try {
-      return await feedFallback();
-    } catch (err2) {
-      console.error('[IG API] user feed fallback failed too:', err2.message);
-    }
-    throw e;
+    clipsError = e;
+    console.warn('[getUserReels] clips/user failed:', e.message);
+  }
+
+  // If clips returned items, use that
+  if (clipsResult && clipsResult.items.length > 0) {
+    return clipsResult;
+  }
+
+  // Fall back to user feed
+  try {
+    const feedResult = await tryFeed(cursor);
+    if (feedResult.items.length > 0) return feedResult;
+    // If feed also empty but clips had a response with pagination, keep that cursor
+    if (clipsResult) return clipsResult;
+    return feedResult;
+  } catch (feedErr) {
+    console.warn('[getUserReels] feed/user also failed:', feedErr.message);
+    if (clipsResult) return clipsResult; // return empty clips result rather than throwing
+    throw clipsError || feedErr;
   }
 }
 
