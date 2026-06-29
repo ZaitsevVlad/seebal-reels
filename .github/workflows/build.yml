@@ -6,7 +6,7 @@ on:
       version:
         description: 'Версия (например: 1.2.0)'
         required: true
-        default: '1.0.0'
+        default: '1.1.0'
       release_notes:
         description: 'Описание обновления (что нового)'
         required: false
@@ -32,8 +32,8 @@ jobs:
           name: win-artifact
           path: dist/SEEBAL-Reels-Windows.exe
 
-  build-mac:
-    name: 🍎 macOS
+  build-mac-arm64:
+    name: 🍎 macOS Apple Silicon (M1/M2/M3)
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -42,26 +42,51 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm install
-      - run: npm run dist:mac
+      - run: npm run dist:mac:arm64
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: true
-      - name: Упаковать .app + лаунчер в один архив
+      - name: Упаковать arm64 .app + лаунчер
         run: |
-          mkdir -p ./mac-release
-          cp -R "dist/mac-universal/SEEBAL Reels.app" ./mac-release/
-          cp scripts/mac-launcher.command "./mac-release/Запустить SEEBAL Reels.command"
-          chmod +x "./mac-release/Запустить SEEBAL Reels.command"
-          cd mac-release && zip -r "../SEEBAL-Reels-Mac.zip" . && cd ..
-
+          mkdir -p ./mac-arm64-release
+          cp -R "dist/mac-arm64/SEEBAL Reels.app" ./mac-arm64-release/
+          cp scripts/mac-launcher.command "./mac-arm64-release/Запустить SEEBAL Reels.command"
+          chmod +x "./mac-arm64-release/Запустить SEEBAL Reels.command"
+          cd mac-arm64-release && zip -r "../SEEBAL-Reels-Mac-arm64.zip" . && cd ..
       - uses: actions/upload-artifact@v4
         with:
-          name: mac-artifact
-          path: SEEBAL-Reels-Mac.zip
+          name: mac-arm64-artifact
+          path: SEEBAL-Reels-Mac-arm64.zip
+
+  build-mac-x64:
+    name: 🍎 macOS Intel (x64)
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm install
+      - run: npm run dist:mac:x64
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: true
+      - name: Упаковать x64 .app + лаунчер
+        run: |
+          mkdir -p ./mac-x64-release
+          cp -R "dist/mac/SEEBAL Reels.app" ./mac-x64-release/
+          cp scripts/mac-launcher.command "./mac-x64-release/Запустить SEEBAL Reels.command"
+          chmod +x "./mac-x64-release/Запустить SEEBAL Reels.command"
+          cd mac-x64-release && zip -r "../SEEBAL-Reels-Mac-x64.zip" . && cd ..
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-x64-artifact
+          path: SEEBAL-Reels-Mac-x64.zip
 
   release:
     name: 🚀 Создать релиз
-    needs: [build-windows, build-mac]
+    needs: [build-windows, build-mac-arm64, build-mac-x64]
     runs-on: ubuntu-latest
     steps:
       - name: Скачать Windows артефакт
@@ -70,10 +95,16 @@ jobs:
           name: win-artifact
           path: ./release-files
 
-      - name: Скачать macOS артефакт
+      - name: Скачать macOS arm64 артефакт
         uses: actions/download-artifact@v4
         with:
-          name: mac-artifact
+          name: mac-arm64-artifact
+          path: ./release-files
+
+      - name: Скачать macOS x64 артефакт
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-x64-artifact
           path: ./release-files
 
       - name: Создать GitHub Release
@@ -84,10 +115,13 @@ jobs:
           body: |
             ## 📥 Скачать
 
-            | Платформа | Файл |
-            |-----------|------|
-            | 🪟 Windows | `SEEBAL-Reels-Windows.exe` — просто запусти |
-            | 🍎 macOS | `SEEBAL-Reels-Mac-universal.zip` — разархивируй, перетащи в Applications |
+            | Платформа | Файл | Для кого |
+            |-----------|------|----------|
+            | 🪟 Windows | `SEEBAL-Reels-Windows.exe` | просто запусти |
+            | 🍎 macOS Apple Silicon | `SEEBAL-Reels-Mac-arm64.zip` | M1, M2, M3, M4 |
+            | 🍎 macOS Intel | `SEEBAL-Reels-Mac-x64.zip` | старые Mac с Intel |
+
+            > Не знаешь какой Mac? Нажми 🍎 → «Об этом Mac» — если «Apple M...» → arm64, если «Intel» → x64
 
             ---
 
@@ -100,7 +134,8 @@ jobs:
             > **Mac:** при первом запуске правый клик → Open → Open
           files: |
             ./release-files/SEEBAL-Reels-Windows.exe
-            ./release-files/SEEBAL-Reels-Mac.zip
+            ./release-files/SEEBAL-Reels-Mac-arm64.zip
+            ./release-files/SEEBAL-Reels-Mac-x64.zip
           draft: false
           prerelease: false
         env:
