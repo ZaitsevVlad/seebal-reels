@@ -1,17 +1,20 @@
-const { app, BrowserWindow, ipcMain, dialog, Notification, session, net, shell } = require('electron');
+﻿const { app, BrowserWindow, ipcMain, dialog, Notification, session, net, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
 const http = require('http');
 const { URL } = require('url');
 
-// ─── Constants ────────────────────────────────────────
+// в”Ђв”Ђв”Ђ Constants в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 const IG_APP_ID = '936619743392459';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 const STORE_FILE = path.join(app.getPath('userData'), 'app-store.json');
+const VIDIQ_EXTENSION_PATH = 'C:\\Users\\user\\Downloads\\Telegram Desktop\\vidIQ-Vision-for-YouTube-Chrome-Web-Store';
+const EXTENSION_LOG_FILE = path.join(__dirname, 'seebal-extension.log');
 
 let mainWindow = null;
 let monitorTimers = {};
+let instagramAgentWindow = null;
 const igCooldowns = new Map();
 
 const IG_RATE_LIMIT_MS = 2 * 60 * 1000;
@@ -19,7 +22,7 @@ const USER_CACHE_MS = 15 * 60 * 1000;
 const userInfoCache = new Map();
 const reelMetricsCache = new Map();
 
-// ─── Simple JSON Store ────────────────────────────────
+// в”Ђв”Ђв”Ђ Simple JSON Store в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function loadStore() {
   try { return JSON.parse(fs.readFileSync(STORE_FILE, 'utf-8')); }
   catch { return {}; }
@@ -34,7 +37,7 @@ function setSetting(key, val) {
   const s = loadStore(); s[key] = val; saveStore(s);
 }
 
-// ─── Instagram Cookie Helpers ─────────────────────────
+// в”Ђв”Ђв”Ђ Instagram Cookie Helpers в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async function getIGCookies() {
   // Fetch cookies from all instagram domains
   const cookies = await session.defaultSession.cookies.get({ url: 'https://www.instagram.com' });
@@ -51,13 +54,13 @@ async function checkLoggedIn() {
   return !!sid && !!sid.value;
 }
 
-// ─── Instagram Login Window ───────────────────────────
+// в”Ђв”Ђв”Ђ Instagram Login Window в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function openLoginWindow() {
   return new Promise((resolve) => {
     const win = new BrowserWindow({
       width: 480, height: 780,
       parent: mainWindow, modal: true,
-      title: 'Вход в Instagram',
+      title: 'Р’С…РѕРґ РІ Instagram',
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -66,14 +69,14 @@ function openLoginWindow() {
       }
     });
     win.setMenuBarVisibility(false);
-    // Use the same desktop Chrome UA as API requests — session is tied to UA
+    // Use the same desktop Chrome UA as API requests вЂ” session is tied to UA
     win.webContents.setUserAgent(UA);
     win.loadURL('https://www.instagram.com/accounts/login/');
 
     let closed = false;
     let pollTimer = null;
 
-    // Robust cookie polling – works regardless of what URL Instagram redirects to
+    // Robust cookie polling вЂ“ works regardless of what URL Instagram redirects to
     // after captcha, 2FA, challenge, or any regional variant
     const pollLogin = async () => {
       if (closed) return;
@@ -105,7 +108,7 @@ function openLoginWindow() {
       ];
       const isAuthPage = authPages.some(p => url.includes(p));
       if (!isAuthPage && url.includes('instagram.com')) {
-        // Navigation landed somewhere that isn't a login page — likely home
+        // Navigation landed somewhere that isn't a login page вЂ” likely home
         const loggedIn = await checkLoggedIn();
         if (loggedIn && !closed) {
           closed = true;
@@ -129,8 +132,79 @@ function openLoginWindow() {
   });
 }
 
-// ─── Instagram API Fetch ──────────────────────────────
+// в”Ђв”Ђв”Ђ Instagram API Fetch в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+function waitForLoad(win, timeout = 12000) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, timeout);
+    win.webContents.once('did-finish-load', finish);
+    win.webContents.once('did-stop-loading', finish);
+    win.webContents.once('did-fail-load', finish);
+  });
+}
+
+async function getInstagramAgentWindow(url) {
+  if (!instagramAgentWindow || instagramAgentWindow.isDestroyed()) {
+    instagramAgentWindow = new BrowserWindow({
+      width: 420,
+      height: 760,
+      show: false,
+      skipTaskbar: true,
+      title: 'Instagram Agent',
+      webPreferences: {
+        preload: path.join(__dirname, 'src', 'instagram-agent-preload.js'),
+        nodeIntegration: false,
+        contextIsolation: false,
+        sandbox: false
+      }
+    });
+    instagramAgentWindow.setMenuBarVisibility(false);
+  }
+
+  const current = instagramAgentWindow.webContents.getURL();
+  if (!current || !current.startsWith(url.split('?')[0])) {
+    await instagramAgentWindow.loadURL(url);
+    await waitForLoad(instagramAgentWindow);
+    await sleep(1800);
+  }
+
+  return instagramAgentWindow;
+}
+
+async function collectInstagramPageReels(url, scrolls = 3) {
+  if (!(await checkLoggedIn())) throw new Error('Instagram С‚СЂРµР±СѓРµС‚ Р°РІС‚РѕСЂРёР·Р°С†РёСЋ. РќР°Р¶РјРёС‚Рµ В«Р’РѕР№С‚Рё РІ InstagramВ».');
+  const win = await getInstagramAgentWindow(url);
+  const pageUrl = win.webContents.getURL();
+  if (pageUrl.includes('/accounts/login')) throw new Error('Instagram С‚СЂРµР±СѓРµС‚ Р°РІС‚РѕСЂРёР·Р°С†РёСЋ. РќР°Р¶РјРёС‚Рµ В«Р’РѕР№С‚Рё РІ InstagramВ».');
+
+  const collected = new Map();
+  for (let i = 0; i < scrolls; i++) {
+    const items = await win.webContents.executeJavaScript(
+      'window.__SEEBAL_IG_AGENT__ ? window.__SEEBAL_IG_AGENT__.collectReels() : []',
+      true
+    ).catch(() => []);
+    for (const item of items || []) {
+      if (!item?.id) continue;
+      collected.set(String(item.id), item);
+    }
+    await win.webContents.executeJavaScript(
+      'window.__SEEBAL_IG_AGENT__ && window.__SEEBAL_IG_AGENT__.scrollMore()',
+      true
+    ).catch(() => null);
+    await sleep(900);
+  }
+
+  const items = [...collected.values()].filter(item => item.thumbnailUrl || item.videoUrl);
+  return { items, hasMore: true, cursor: `dom:${Date.now()}` };
+}
 
 function getIGCooldownKey(url) {
   if (url.includes('/web_profile_info/')) return 'profile';
@@ -153,7 +227,7 @@ async function fetchIG(url, method = 'GET', body = null, retries = 0, options = 
   const cooldownLeft = (igCooldowns.get(cooldownKey) || 0) - Date.now();
   if (!options.ignoreCooldown && cooldownLeft > 0) {
     const seconds = Math.ceil(cooldownLeft / 1000);
-    throw igError(`Instagram временно ограничил запросы. Подождите ${seconds} сек.`, 'IG_COOLDOWN', 429);
+    throw igError(`Instagram РІСЂРµРјРµРЅРЅРѕ РѕРіСЂР°РЅРёС‡РёР» Р·Р°РїСЂРѕСЃС‹. РџРѕРґРѕР¶РґРёС‚Рµ ${seconds} СЃРµРє.`, 'IG_COOLDOWN', 429);
   }
 
   const cookie = await getIGCookies();
@@ -195,7 +269,7 @@ async function fetchIG(url, method = 'GET', body = null, retries = 0, options = 
     if (attempt > 0) {
       const delay = Math.min(3000 * Math.pow(2, attempt - 1), 15000);
       console.log(`[IG API] Retry ${attempt}/${retries} after ${delay}ms...`);
-      if (mainWindow) mainWindow.webContents.send('loading-status', `Повтор ${attempt}/${retries}...`);
+      if (mainWindow) mainWindow.webContents.send('loading-status', `РџРѕРІС‚РѕСЂ ${attempt}/${retries}...`);
       await sleep(delay);
     }
 
@@ -206,10 +280,10 @@ async function fetchIG(url, method = 'GET', body = null, retries = 0, options = 
     } catch (netErr) {
       console.error(`[IG API] Network error on ${url}:`, netErr.message);
       if (attempt < retries) continue;
-      throw new Error('Ошибка сети. Проверьте подключение к интернету.');
+      throw new Error('РћС€РёР±РєР° СЃРµС‚Рё. РџСЂРѕРІРµСЂСЊС‚Рµ РїРѕРґРєР»СЋС‡РµРЅРёРµ Рє РёРЅС‚РµСЂРЅРµС‚Сѓ.');
     }
 
-    console.log(`[IG API] ${method} ${url.split('?')[0]} → ${response.status} (${text.length}b)`);
+    console.log(`[IG API] ${method} ${url.split('?')[0]} в†’ ${response.status} (${text.length}b)`);
     if (text.length < 1000) {
       console.log(`[IG API] Body: ${text}`);
     } else {
@@ -219,17 +293,17 @@ async function fetchIG(url, method = 'GET', body = null, retries = 0, options = 
     if (response.status === 429) {
       const retryAfter = parseInt(response.headers.get('retry-after') || '', 10);
       igCooldowns.set(cooldownKey, Date.now() + (Number.isFinite(retryAfter) ? retryAfter * 1000 : IG_RATE_LIMIT_MS));
-      throw igError('Instagram ограничил запросы. Подождите 2 минуты.', 'IG_RATE_LIMITED', 429);
+      throw igError('Instagram РѕРіСЂР°РЅРёС‡РёР» Р·Р°РїСЂРѕСЃС‹. РџРѕРґРѕР¶РґРёС‚Рµ 2 РјРёРЅСѓС‚С‹.', 'IG_RATE_LIMITED', 429);
     }
 
     if (response.status === 401 || response.status === 403) {
       console.error(`[IG API] Auth error ${response.status}`);
-      throw igError('Сессия истекла. Нажмите «Войти в Instagram» и авторизуйтесь заново.', 'IG_AUTH', response.status);
+      throw igError('РЎРµСЃСЃРёСЏ РёСЃС‚РµРєР»Р°. РќР°Р¶РјРёС‚Рµ В«Р’РѕР№С‚Рё РІ InstagramВ» Рё Р°РІС‚РѕСЂРёР·СѓР№С‚РµСЃСЊ Р·Р°РЅРѕРІРѕ.', 'IG_AUTH', response.status);
     }
 
     if (!response.ok) {
       console.error(`[IG API] HTTP ${response.status}`);
-      throw igError(`Ошибка Instagram (${response.status}). Попробуйте позже.`, 'IG_HTTP', response.status);
+      throw igError(`РћС€РёР±РєР° Instagram (${response.status}). РџРѕРїСЂРѕР±СѓР№С‚Рµ РїРѕР·Р¶Рµ.`, 'IG_HTTP', response.status);
     }
 
     // Parse JSON response
@@ -239,22 +313,22 @@ async function fetchIG(url, method = 'GET', body = null, retries = 0, options = 
     } catch (e) {
       console.error(`[IG API] Non-JSON response:`, text.substring(0, 300));
       if (text.includes('login') || text.includes('LoginAndSignupPage')) {
-        throw new Error('Instagram требует авторизацию. Нажмите «Войти в Instagram».');
+        throw new Error('Instagram С‚СЂРµР±СѓРµС‚ Р°РІС‚РѕСЂРёР·Р°С†РёСЋ. РќР°Р¶РјРёС‚Рµ В«Р’РѕР№С‚Рё РІ InstagramВ».');
       }
       if (attempt < retries) continue;
-      throw new Error('Instagram вернул неожиданный ответ. Попробуйте позже.');
+      throw new Error('Instagram РІРµСЂРЅСѓР» РЅРµРѕР¶РёРґР°РЅРЅС‹Р№ РѕС‚РІРµС‚. РџРѕРїСЂРѕР±СѓР№С‚Рµ РїРѕР·Р¶Рµ.');
     }
 
     if (data?.status === 'fail' || data?.message === 'login_required') {
       console.error('[IG API] login_required/fail:', JSON.stringify(data).substring(0, 300));
-      throw new Error('Instagram требует авторизацию. Нажмите «Войти в Instagram».');
+      throw new Error('Instagram С‚СЂРµР±СѓРµС‚ Р°РІС‚РѕСЂРёР·Р°С†РёСЋ. РќР°Р¶РјРёС‚Рµ В«Р’РѕР№С‚Рё РІ InstagramВ».');
     }
 
     return data;
   }
 }
 
-// ─── Instagram: Get User Info ─────────────────────────
+// в”Ђв”Ђв”Ђ Instagram: Get User Info в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async function getUserInfo(username) {
   const normalized = username.trim().replace(/^@/, '').toLowerCase();
   const cached = userInfoCache.get(normalized);
@@ -290,7 +364,7 @@ async function getUserInfo(username) {
     }
   }
 
-  if (!user?.id) throw new Error('Пользователь не найден');
+  if (!user?.id) throw new Error('РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ');
   const info = {
     id: user.id,
     username: user.username,
@@ -324,7 +398,7 @@ async function getUserInfo(username) {
   return info;
 }
 
-// ─── Instagram: Get Reels ─────────────────────────────
+// в”Ђв”Ђв”Ђ Instagram: Get Reels в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function parseReelItem(item) {
   const media = item.media || item;
   const videoVersions = media.video_versions || [];
@@ -385,7 +459,17 @@ async function enrichReelMetrics(items) {
 }
 
 async function getUserReels(userId, cursor = '') {
-  // Strategy 1: clips/user POST – returns only Reels (most accurate)
+  function resolveUsernameByUserId() {
+    for (const cached of userInfoCache.values()) {
+      if (String(cached?.user?.id) === String(userId)) return cached.user.username;
+    }
+    const saved = getSetting('savedAccounts', []).find(account =>
+      String(account.userId || account.id) === String(userId)
+    );
+    return saved?.username || '';
+  }
+
+  // Strategy 1: clips/user POST вЂ“ returns only Reels (most accurate)
   const tryClips = async (cur) => {
     const params = new URLSearchParams({
       target_user_id: String(userId),
@@ -402,7 +486,7 @@ async function getUserReels(userId, cursor = '') {
     };
   };
 
-  // Strategy 2: feed/user GET – returns all media, we filter for videos/reels
+  // Strategy 2: feed/user GET вЂ“ returns all media, we filter for videos/reels
   const tryFeed = async (cur) => {
     const query = new URLSearchParams({ count: '50' });
     if (cur) query.set('max_id', cur);
@@ -442,12 +526,21 @@ async function getUserReels(userId, cursor = '') {
     return feedResult;
   } catch (feedErr) {
     console.warn('[getUserReels] feed/user also failed:', feedErr.message);
+    const username = resolveUsernameByUserId();
+    if (username) {
+      try {
+        const domResult = await collectInstagramPageReels(`https://www.instagram.com/${encodeURIComponent(username)}/reels/`, cursor ? 2 : 4);
+        if (domResult.items.length > 0) return domResult;
+      } catch (domErr) {
+        console.warn('[getUserReels] page agent failed:', domErr.message);
+      }
+    }
     if (clipsResult) return clipsResult; // return empty clips result rather than throwing
     throw clipsError || feedErr;
   }
 }
 
-// ─── Instagram: Get Discover/Explore Reels ────────────
+// в”Ђв”Ђв”Ђ Instagram: Get Discover/Explore Reels в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function findReelsConnection(root) {
   const seen = new WeakSet();
   let best = null;
@@ -472,11 +565,18 @@ function findReelsConnection(root) {
 }
 
 async function getTrendingReels(cursor = '') {
+  try {
+    const domResult = await collectInstagramPageReels('https://www.instagram.com/reels/', cursor ? 2 : 4);
+    if (domResult.items.length > 0) return domResult;
+  } catch (error) {
+    console.warn('[Trending] Instagram page agent failed, trying API:', error.message);
+  }
+
   const variables = {
     after: cursor || null,
     before: null,
     data: { container_module: 'clips_tab_desktop_page', seen_reels: '[]' },
-    first: 12,
+    first: 40,
     last: null,
     __relay_internal__pv__PolarisReelsRecoDebugOverlayEnabledrelayprovider: false,
     __relay_internal__pv__PolarisAIGMMediaWebLabelEnabledrelayprovider: false
@@ -487,20 +587,22 @@ async function getTrendingReels(cursor = '') {
     variables: JSON.stringify(variables),
     doc_id: '36825039943776829'
   });
-  const graphData = await fetchIG('https://www.instagram.com/graphql/query', 'POST', body.toString());
-  const graphResult = findReelsConnection(graphData);
+  try {
+    const graphData = await fetchIG('https://www.instagram.com/graphql/query', 'POST', body.toString());
+    const graphResult = findReelsConnection(graphData);
 
-  if (!graphResult || graphResult.media.length === 0) {
-    throw new Error('Instagram не вернул трендовые Reels. Попробуйте обновить ленту позже.');
+    if (graphResult && graphResult.media.length > 0) {
+      const graphPageInfo = graphResult.connection.page_info || {};
+      const graphItems = await enrichReelMetrics(graphResult.media.map(parseReelItem));
+      return {
+        items: graphItems,
+        hasMore: !!graphPageInfo.has_next_page,
+        cursor: graphPageInfo.end_cursor || ''
+      };
+    }
+  } catch (error) {
+    console.warn('[Trending] GraphQL failed, trying fallback endpoints:', error.message);
   }
-
-  const graphPageInfo = graphResult.connection.page_info || {};
-  const graphItems = await enrichReelMetrics(graphResult.media.map(parseReelItem));
-  return {
-    items: graphItems,
-    hasMore: !!graphPageInfo.has_next_page,
-    cursor: graphPageInfo.end_cursor || ''
-  };
 
   const endpoints = [
     { url: 'https://i.instagram.com/api/v1/clips/reels_tab/', method: 'POST', type: 'clips' },
@@ -588,10 +690,10 @@ async function getTrendingReels(cursor = '') {
     }
   }
 
-  throw lastError || new Error('Не удалось загрузить ленту. Попробуйте позже.');
+  throw lastError || new Error('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ Р»РµРЅС‚Сѓ. РџРѕРїСЂРѕР±СѓР№С‚Рµ РїРѕР·Р¶Рµ.');
 }
 
-// ─── Proxy Avatar ─────────────────────────────────────
+// в”Ђв”Ђв”Ђ Proxy Avatar в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async function proxyAvatar(avatarUrl) {
   if (!avatarUrl) return '';
   try {
@@ -615,7 +717,7 @@ async function proxyAvatar(avatarUrl) {
   }
 }
 
-// ─── Download Video File ──────────────────────────────
+// в”Ђв”Ђв”Ђ Download Video File в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function downloadFile(videoUrl, destPath, reelId) {
   return new Promise((resolve, reject) => {
     const follow = (dlUrl) => {
@@ -644,7 +746,7 @@ function downloadFile(videoUrl, destPath, reelId) {
   });
 }
 
-// ─── Monitoring ───────────────────────────────────────
+// в”Ђв”Ђв”Ђ Monitoring в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function startMonitoring() {
   const accounts = getSetting('savedAccounts', []);
   accounts.forEach(acc => {
@@ -658,8 +760,8 @@ function startMonitoring() {
           if (lastSeen && latest.id.toString() !== lastSeen) {
             setSetting(`lastReel_${acc.username}`, latest.id.toString());
             new Notification({
-              title: 'Новый Reels!',
-              body: `@${acc.username} опубликовал новый Reels`,
+              title: 'РќРѕРІС‹Р№ Reels!',
+              body: `@${acc.username} РѕРїСѓР±Р»РёРєРѕРІР°Р» РЅРѕРІС‹Р№ Reels`,
               icon: path.join(__dirname, 'src', 'icon.png')
             }).show();
             if (mainWindow) mainWindow.webContents.send('new-reel-detected', { username: acc.username });
@@ -677,49 +779,676 @@ function stopAllMonitoring() {
   monitorTimers = {};
 }
 
-// ─── Create Main Window ──────────────────────────────
+// в”Ђв”Ђв”Ђ Create Main Window в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+async function injectInstagramAnalyzer() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const wc = mainWindow.webContents;
+  const base = path.join(__dirname, 'src', 'local-instagram-reels-analyzer');
+  const css = fs.readFileSync(path.join(base, 'content.css'), 'utf8');
+  const content = fs.readFileSync(path.join(base, 'content.js'), 'utf8');
+  await wc.insertCSS(css + `
+    html.seebal-analyzer-mode body > *:not(#local-reels-analyzer-root):not(#local-reels-analyzer-button){visibility:hidden!important;pointer-events:none!important}
+    html.seebal-analyzer-mode #local-reels-analyzer-root,
+    html.seebal-analyzer-mode #local-reels-analyzer-root *,
+    html.seebal-analyzer-mode #local-reels-analyzer-button{visibility:visible!important;pointer-events:auto!important}
+    html.seebal-analyzer-mode #local-reels-analyzer-button{display:none!important}
+    html.seebal-analyzer-mode body{background:#050505!important;overflow:hidden!important}
+    .seebal-download-btn{border:1px solid rgba(255,255,255,.22);background:#fff;color:#050505;border-radius:10px;padding:10px 12px;font-weight:800;cursor:pointer}
+    .seebal-folder-btn{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#fff;border-radius:10px;padding:10px 12px;font-weight:700;cursor:pointer}
+  `);
+  const boot = `
+    (() => {
+      window.chrome = window.chrome || {};
+      chrome.storage = chrome.storage || {};
+      chrome.storage.local = chrome.storage.local || {
+        async get(key) {
+          const out = {};
+          if (typeof key === 'string') out[key] = JSON.parse(localStorage.getItem(key) || 'null');
+          return out;
+        },
+        async set(obj) {
+          for (const [key, value] of Object.entries(obj || {})) localStorage.setItem(key, JSON.stringify(value));
+        }
+      };
+      ${content}
+      function analyzerMode() {
+        if (location.pathname.includes('/accounts/login')) {
+          document.documentElement.classList.remove('seebal-analyzer-mode');
+          return;
+        }
+        document.documentElement.classList.add('seebal-analyzer-mode');
+        if (!document.querySelector('.lra-overlay')) document.getElementById('local-reels-analyzer-button')?.click();
+      }
+      function addDownloadControls() {
+        const actions = document.querySelector('.lra-modal-actions');
+        if (!actions || actions.querySelector('.seebal-download-btn')) return;
+        const video = document.querySelector('.lra-modal video');
+        const title = document.querySelector('.lra-modal-info h2')?.textContent || 'instagram';
+        const link = document.querySelector('.lra-modal-actions a[href*="/reel/"]')?.href || '';
+        const code = (link.match(/\\/reel\\/([^/?#]+)/) || [])[1] || '';
+        if (!video?.src) return;
+        const download = document.createElement('button');
+        download.className = 'seebal-download-btn';
+        download.textContent = 'Download video';
+        download.onclick = () => window.postMessage({ type: 'SEEBAL_DOWNLOAD_VIDEO', url: video.src, code, username: title.replace(/^@/, '') }, '*');
+        const folder = document.createElement('button');
+        folder.className = 'seebal-folder-btn';
+        folder.textContent = 'Choose folder';
+        folder.onclick = () => window.postMessage({ type: 'SEEBAL_SELECT_FOLDER' }, '*');
+        actions.append(download, folder);
+      }
+      window.addEventListener('message', (event) => {
+        if (event.data?.type === 'SEEBAL_DOWNLOAD_DONE') alert('Downloaded: ' + event.data.file);
+        if (event.data?.type === 'SEEBAL_ERROR') alert(event.data.message);
+      });
+      new MutationObserver(analyzerMode).observe(document.documentElement, { childList: true, subtree: true });
+      new MutationObserver(addDownloadControls).observe(document.documentElement, { childList: true, subtree: true });
+      setInterval(analyzerMode, 700);
+      setInterval(addDownloadControls, 1000);
+      analyzerMode();
+    })();
+  `;
+  await wc.executeJavaScript(boot, true);
+}
+
+// в”Ђв”Ђв”Ђ Shell CSS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+const SHELL_CSS = `
+  html.sb-html-on, html.sb-html-on body{width:100vw!important;height:100vh!important;max-width:100vw!important;overflow:hidden!important;margin:0!important}
+  #seebal-shell{position:fixed;left:0;top:0;width:100vw;height:100vh;max-width:100vw;max-height:100vh;z-index:2147483600;background:#070707;color:#f0f0f0;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+  #seebal-shell *{box-sizing:border-box}
+  #seebal-topbar{height:58px;min-height:58px;display:flex;align-items:center;gap:10px;padding:0 18px;border-bottom:1px solid #1e1e1e;background:#050505;flex-shrink:0}
+  #seebal-brand{font-weight:900;font-size:17px;letter-spacing:.06em;color:#fff;margin-right:4px}
+  #seebal-brand span{color:#5b9bff}
+  .sb-btn{border:1px solid #2a2a2a;background:#131313;color:#e0e0e0;border-radius:8px;padding:7px 13px;font-size:13px;font-weight:700;cursor:pointer;transition:background .12s,border-color .12s}
+  .sb-btn:hover{background:#202020;border-color:#444}
+  .sb-btn.primary{background:#2878ff;border-color:#2878ff;color:#fff}
+  .sb-btn.primary:hover{background:#1a6aee}
+  .sb-field{height:36px;border:1px solid #262626;background:#111;color:#ddd;border-radius:9px;padding:0 12px;font-size:13px;outline:none}
+  .sb-search{min-width:260px}
+  .sb-segments{display:flex;border:1px solid #262626;border-radius:9px;overflow:hidden;background:#101010}
+  .sb-segments button{height:34px;min-width:42px;border:0;border-right:1px solid #262626;background:transparent;color:#888;font-weight:800;cursor:pointer}
+  .sb-segments button:last-child{border-right:0}.sb-segments button.active{background:#2878ff;color:#fff}
+  #seebal-count{margin-left:auto;color:#888;font-size:12px;white-space:nowrap}
+  #seebal-body{flex:1;display:flex;min-height:0;width:100%;max-width:100%;overflow:hidden}
+  #seebal-rail{width:64px;flex-shrink:0;background:#0b0b0b;border-right:1px solid #1a1a1a;display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 8px}
+  .sb-rail-btn{width:42px;height:42px;border:1px solid #242424;border-radius:12px;background:#151515;color:#aaa;font-size:17px;cursor:pointer;display:grid;place-items:center;line-height:1}
+  .sb-rail-btn:hover,.sb-rail-btn.active{background:#202020;color:#fff;border-color:#3a3a3a}
+  #seebal-sidebar{width:0;overflow:hidden;border-right:1px solid #1a1a1a;background:#080808;transition:width .2s;flex-shrink:0;display:flex;flex-direction:column}
+  #seebal-sidebar.open{width:280px}
+  #seebal-sidebar-inner{width:280px;padding:14px;overflow-y:auto;flex:1}
+  #seebal-sidebar h3{margin:0 0 10px;font-size:13px;color:#888;text-transform:uppercase;letter-spacing:.08em}
+  .sb-profile-item{display:grid;grid-template-columns:36px 1fr auto;gap:8px;align-items:center;padding:9px 10px;border:1px solid #1d1d1d;border-radius:8px;margin-bottom:7px;background:#0f0f0f;cursor:pointer;transition:border-color .12s,background .12s}
+  .sb-profile-item:hover{border-color:#333;background:#151515}
+  .sb-profile-item img{width:36px;height:36px;border-radius:50%;object-fit:cover;background:#1a1a1a}
+  .sb-profile-item strong{display:block;font-size:13px;color:#e8e8e8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sb-profile-item small{display:block;font-size:11px;color:#666;margin-top:1px}
+  .sb-profile-del{border:0;background:transparent;color:#555;font-size:16px;cursor:pointer;padding:2px 6px;border-radius:4px}
+  .sb-profile-del:hover{color:#ff6b6b}
+  .sb-add-form{display:flex;gap:6px;margin-bottom:12px}
+  .sb-add-form input{flex:1;background:#111;border:1px solid #2a2a2a;border-radius:7px;padding:8px 10px;color:#e0e0e0;font-size:13px}
+  .sb-add-form input::placeholder{color:#444}
+  #seebal-grid-wrap{flex:1;min-width:0;width:100%;max-width:100%;overflow-y:auto;overflow-x:hidden}
+  #seebal-grid{width:100%;max-width:100%;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px;padding:18px;align-content:start;overflow:hidden}
+  .sb-card{background:#111;border:1px solid #1e1e1e;border-radius:10px;overflow:hidden;position:relative;cursor:pointer;transition:transform .13s,border-color .13s}
+  .sb-card:hover{transform:translateY(-2px);border-color:#3a3a3a}
+  .sb-card video,.sb-card img{width:100%;aspect-ratio:9/16;object-fit:cover;display:block;background:#0a0a0a}
+  .sb-card.playing .sb-play{display:none}
+  .sb-card-meta{padding:10px 12px;font-size:12px}
+  .sb-card-user{color:#e0e0e0;font-weight:800;display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+  .sb-caption{color:#cfcfcf;line-height:1.25;height:32px;overflow:hidden;margin:5px 0}
+  .sb-card-stats{color:#aaa;display:grid;grid-template-columns:1fr 1fr;gap:5px 10px;font-weight:700}
+  .sb-card-tools{position:absolute;left:50%;bottom:124px;transform:translateX(-50%);display:flex;justify-content:center;gap:8px;opacity:0;transition:.13s;padding:6px;pointer-events:none;z-index:4}
+  .sb-card:hover .sb-card-tools{opacity:1}
+  .sb-card:hover .sb-card-tools{pointer-events:auto}
+  .sb-tool{width:38px;height:38px;border:0;background:rgba(255,255,255,.92);color:#111;border-radius:999px;font-size:17px;font-weight:900;cursor:pointer;display:grid;place-items:center;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+  .sb-hide{position:absolute;right:9px;top:9px;width:30px;height:30px;border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.55);color:#fff;border-radius:999px;opacity:0;cursor:pointer;font-weight:900}
+  .sb-card:hover .sb-hide{opacity:1}
+  .sb-viral{position:absolute;right:9px;top:9px;background:#d21462;color:#fff;border-radius:7px;padding:6px 8px;font-size:12px;font-weight:900}
+  .sb-card:hover .sb-viral{right:45px}
+  .sb-play{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);width:50px;height:50px;border-radius:50%;border:0;background:rgba(255,255,255,.85);color:#111;font-size:20px;opacity:0;transition:.13s;cursor:pointer}
+  .sb-card:hover .sb-play{opacity:1}
+  .sb-duration{position:absolute;right:9px;bottom:124px;background:rgba(0,0,0,.72);border-radius:7px;padding:4px 6px;font-weight:900;font-size:12px;z-index:3}
+  .sb-add-btn{border:0;background:#1e1e1e;color:#bbb;border-radius:50%;width:22px;height:22px;font-size:14px;cursor:pointer;line-height:1;flex-shrink:0}
+  .sb-profile-link{border:0;background:transparent;color:#e0e0e0;font:inherit;font-weight:800;padding:0;cursor:pointer;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sb-profile-link:hover{color:#8bb6ff}
+  #seebal-status{padding:40px;text-align:center;color:#555;font-size:14px;grid-column:1/-1}
+  body.sb-on > *:not(#seebal-shell){visibility:hidden!important;pointer-events:none!important}
+`;
+
+// в”Ђв”Ђв”Ђ Shell JS (injected into instagram page) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+function buildShellJS() {
+  return `(() => {
+    if (window.__SEEBAL_SHELL__) return;
+    window.__SEEBAL_SHELL__ = true;
+    document.documentElement.classList.add('sb-html-on');
+    document.body.classList.add('sb-on');
+    window.scrollTo(0, 0);
+    document.documentElement.scrollLeft = 0;
+    document.body.scrollLeft = 0;
+
+    const shell = document.createElement('div');
+    shell.id = 'seebal-shell';
+    shell.innerHTML = \`
+      <div id="seebal-topbar">
+        <div id="seebal-brand">SEEBAL<span>REELS</span></div>
+        <button class="sb-btn primary" data-act="feed">Feed</button>
+        <button class="sb-btn" data-act="refresh">Refresh</button>
+        <select class="sb-field" id="sb-sort">
+          <option value="feed">Sort: Feed</option>
+          <option value="views">Sort: Views</option>
+          <option value="likes">Sort: Likes</option>
+          <option value="comments">Sort: Comments</option>
+          <option value="newest">Sort: Newest</option>
+          <option value="viral">Sort: Viral</option>
+        </select>
+        <input class="sb-field sb-search" id="sb-search" placeholder="Search caption or username">
+        <div class="sb-segments" id="sb-limit">
+          <button data-limit="10">10</button><button data-limit="20" class="active">20</button><button data-limit="30">30</button><button data-limit="40">40</button>
+        </div>
+        <button class="sb-btn" data-act="load-more">Load more</button>
+        <button class="sb-btn" data-act="folder">Folder</button>
+        <button class="sb-btn" data-act="auth" id="sb-auth">Instagram</button>
+        <div id="seebal-count">-</div>
+      </div>
+      <div id="seebal-body">
+        <div id="seebal-rail">
+          <button class="sb-rail-btn active" data-act="feed" title="Feed">⌂</button>
+          <button class="sb-rail-btn" data-act="profiles" title="Profiles">♡</button>
+          <button class="sb-rail-btn" data-sort-short="views" title="Views">↗</button>
+          <button class="sb-rail-btn" data-sort-short="viral" title="Viral">✦</button>
+          <button class="sb-rail-btn" data-act="refresh" title="Refresh">↻</button>
+        </div>
+        <div id="seebal-sidebar">
+          <div id="seebal-sidebar-inner">
+            <h3>Profiles</h3>
+            <div class="sb-add-form">
+              <input id="sb-add-input" placeholder="@username or link" />
+              <button class="sb-btn" data-act="add-profile">+</button>
+            </div>
+            <div id="sb-profile-list"></div>
+          </div>
+        </div>
+        <div id="seebal-grid-wrap">
+          <div id="seebal-grid"><div id="seebal-status">Loading...</div><div id="seebal-sentinel"></div></div>
+        </div>
+      </div>
+    \`;
+    document.documentElement.appendChild(shell);
+
+    const grid = document.getElementById('seebal-grid');
+    const count = document.getElementById('seebal-count');
+    const sidebar = document.getElementById('seebal-sidebar');
+    const profileList = document.getElementById('sb-profile-list');
+    const addInput = document.getElementById('sb-add-input');
+    const gridWrap = document.getElementById('seebal-grid-wrap');
+    const searchInput = document.getElementById('sb-search');
+    const sortSelect = document.getElementById('sb-sort');
+    const limitBox = document.getElementById('sb-limit');
+    const authBtn = document.getElementById('sb-auth');
+
+    const st = {
+      items: [], cursor: '', loading: false,
+      profiles: [],
+      hidden: new Set(JSON.parse(localStorage.getItem('sb_hidden') || '[]')),
+      activeProfile: null,  // { userId, username } or null
+      search: '',
+      sort: 'feed',
+      limit: 20,
+      loggedIn: false
+    };
+
+    function esc(v){ return String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmt(n){ n=Number(n||0); return n>=1e6?(n/1e6).toFixed(1)+'M':n>=1000?Math.round(n/1000)+'K':n?String(n):''; }
+    function age(ts){
+      ts=Number(ts||0); if(!ts) return '';
+      const d=Math.max(1, Math.floor((Date.now()/1000-ts)/86400));
+      if(d<2) return 'a day ago';
+      if(d<31) return d+' days ago';
+      const m=Math.floor(d/30); return m+' mo ago';
+    }
+    function dur(sec){
+      sec=Math.round(Number(sec||0)); if(!sec) return '';
+      return Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');
+    }
+    function viral(it){
+      const views=Number(it.viewCount||0), likes=Number(it.likeCount||0), followers=Number(it.followerCount||it.author?.followerCount||0);
+      const base = followers || Math.max(likes*18, 1000);
+      return base ? views/base : 0;
+    }
+    function metric(it,key){
+      if(key==='views') return Number(it.viewCount||0);
+      if(key==='likes') return Number(it.likeCount||0);
+      if(key==='comments') return Number(it.commentCount||0);
+      if(key==='newest') return Number(it.takenAt||0);
+      if(key==='viral') return viral(it);
+      return 0;
+    }
+    function filteredItems(){
+      const q=st.search.trim().toLowerCase();
+      let arr=st.items.filter(it => !st.hidden.has(it.code));
+      if(q) arr=arr.filter(it => ((it.caption||'')+' '+(it.author?.username||'')).toLowerCase().includes(q));
+      if(st.sort !== 'feed') arr=[...arr].sort((a,b)=>metric(b,st.sort)-metric(a,st.sort));
+      return arr.slice(0, st.limit);
+    }
+
+    function cacheKey() {
+      return st.activeProfile?.username ? 'sb_cache_profile_' + st.activeProfile.username : 'sb_cache_feed';
+    }
+    function saveCache() {
+      try { localStorage.setItem(cacheKey(), JSON.stringify({ items: st.items, cursor: st.cursor, ts: Date.now() })); } catch {}
+    }
+    function restoreCache() {
+      try {
+        const data = JSON.parse(localStorage.getItem(cacheKey()) || 'null');
+        if (data?.items?.length) {
+          st.items = data.items;
+          st.cursor = data.cursor || '';
+          render();
+        }
+      } catch {}
+    }
+    async function refreshAuth() {
+      try {
+        st.loggedIn = !!(await request('SEEBAL_AUTH_STATUS'));
+        authBtn.textContent = st.loggedIn ? 'Sign out IG' : 'Login IG';
+        authBtn.classList.toggle('primary', st.loggedIn);
+      } catch {}
+    }
+
+    function request(type, payload) {
+      return new Promise((res, rej) => {
+        const id = type+'-'+Date.now()+'-'+Math.random().toString(36).slice(2);
+        const responseType = type + '_RESPONSE';
+        const timer = setTimeout(() => { window.removeEventListener('message',h); rej(new Error(type+' timeout')); }, 45000);
+        function h(e) {
+          const d = e.data||{};
+          // Must match BOTH requestId AND response type to avoid catching own outgoing message
+          if (d.requestId !== id || d.type !== responseType) return;
+          clearTimeout(timer); window.removeEventListener('message',h);
+          d.error ? rej(new Error(d.error)) : res(d.result);
+        }
+        window.addEventListener('message', h);
+        window.postMessage({ type, requestId: id, ...(payload||{}) }, '*');
+      });
+    }
+
+    function cookie(name) {
+      return (document.cookie.split('; ').find(x => x.startsWith(name + '=')) || '').split('=').slice(1).join('=');
+    }
+    function best(list) {
+      return Array.isArray(list) ? [...list].sort((a,b)=>(b.width||0)*(b.height||0)-(a.width||0)*(a.height||0))[0] : null;
+    }
+    function parseIgMedia(raw) {
+      const media = raw?.media || raw?.media_or_ad || raw?.item || raw?.clips_media || raw;
+      if (!media || !media.code) return null;
+      const video = best(media.video_versions);
+      const thumb = best(media.image_versions2?.candidates);
+      const user = media.user || media.owner || {};
+      return {
+        id: media.pk || media.id || '',
+        code: media.code,
+        videoUrl: video?.url || '',
+        thumbnailUrl: thumb?.url || '',
+        duration: media.video_duration || 0,
+        viewCount: media.ig_play_count || media.play_count || media.fb_play_count || media.view_count || media.video_view_count || 0,
+        likeCount: media.like_count || 0,
+        commentCount: media.comment_count || 0,
+        shareCount: media.reshare_count || media.share_count || 0,
+        saveCount: media.save_count || 0,
+        caption: media.caption?.text || '',
+        takenAt: media.taken_at || 0,
+        author: {
+          id: user.pk || user.pk_id || user.id || '',
+          username: user.username || '',
+          fullName: user.full_name || '',
+          avatar: user.profile_pic_url || '',
+          followerCount: user.follower_count || 0
+        }
+      };
+    }
+    function findConnection(root) {
+      const seen = new WeakSet();
+      let bestFound = null;
+      function visit(v, depth) {
+        if (!v || typeof v !== 'object' || depth > 12 || seen.has(v)) return;
+        seen.add(v);
+        if (Array.isArray(v.edges)) {
+          const items = v.edges.map(e => parseIgMedia(e?.node)).filter(x => x && x.code && x.videoUrl);
+          if (items.length && (!bestFound || items.length > bestFound.items.length)) bestFound = { connection: v, items };
+        }
+        Object.values(v).forEach(child => visit(child, depth + 1));
+      }
+      visit(root, 0);
+      return bestFound;
+    }
+    async function fastFeed(cursor) {
+      const body = new URLSearchParams({
+        fb_api_caller_class: 'RelayModern',
+        fb_api_req_friendly_name: 'PolarisClipsTabDesktopPaginationQuery',
+        variables: JSON.stringify({
+          after: cursor || null,
+          before: null,
+          data: { container_module: 'clips_tab_desktop_page', seen_reels: '[]' },
+          first: 40,
+          last: null,
+          __relay_internal__pv__PolarisReelsRecoDebugOverlayEnabledrelayprovider: false,
+          __relay_internal__pv__PolarisAIGMMediaWebLabelEnabledrelayprovider: false
+        }),
+        doc_id: '36825039943776829'
+      });
+      const res = await fetch('/graphql/query', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-IG-App-ID': '936619743392459',
+          'X-CSRFToken': cookie('csrftoken'),
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body
+      });
+      if (!res.ok) throw new Error('fast feed ' + res.status);
+      const found = findConnection(await res.json());
+      if (!found?.items?.length) throw new Error('fast feed empty');
+      return { items: found.items, cursor: found.connection?.page_info?.end_cursor || '', hasMore: !!found.connection?.page_info?.has_next_page };
+    }
+
+    async function loadProfiles() {
+      try { st.profiles = await request('SEEBAL_GET_SAVED_ACCOUNTS') || []; } catch {}
+      renderProfiles();
+    }
+
+    function renderProfiles() {
+      profileList.innerHTML = st.profiles.map(p => \`
+        <div class="sb-profile-item" data-username="\${esc(p.username)}">
+          <img src="\${esc(p.avatar||'')}" onerror="this.style.display='none'">
+          <div><strong>@\${esc(p.username)}</strong><small>\${esc(p.fullName||'')}</small></div>
+          <button class="sb-profile-del" data-del="\${esc(p.username)}">x</button>
+        </div>
+      \`).join('') || '<div style="color:#555;font-size:13px">No saved profiles</div>';
+    }
+
+    async function loadFeed(reset) {
+      if (st.loading) return;
+      if (!reset && !st.cursor) return;
+      st.loading = true;
+      count.textContent = 'Loading...';
+      if (reset) {
+        st.items=[]; st.cursor='';
+        grid.innerHTML='<div id="seebal-status">Loading...</div><div id="seebal-sentinel"></div>';
+        restoreCache();
+      }
+      try {
+        let data;
+        if (!st.activeProfile?.userId && !st.activeProfile?.username) {
+          try { data = await fastFeed(st.cursor); } catch { data = null; }
+        }
+        if (!data) data = await request('SEEBAL_FEED_REQUEST', { cursor: st.cursor, userId: st.activeProfile?.userId||'', username: st.activeProfile?.username||'' });
+        const newItems = (data.items||[]).filter(it => it && it.code && !st.hidden.has(it.code));
+        const existing = new Set((reset ? [] : st.items).map(it => it.code));
+        const uniqueNew = newItems.filter(it => !existing.has(it.code));
+        st.items = reset ? uniqueNew : [...st.items, ...uniqueNew];
+        st.cursor = data.cursor||'';
+        saveCache();
+        if (!reset && st.sort === 'feed' && !st.search && uniqueNew.length) {
+          const sentinel = document.getElementById('seebal-sentinel');
+          const html = uniqueNew.slice(0, Math.max(0, st.limit - grid.querySelectorAll('.sb-card').length)).map(cardHtml).join('');
+          if (sentinel) sentinel.insertAdjacentHTML('beforebegin', html);
+          else grid.insertAdjacentHTML('beforeend', html + '<div id="seebal-sentinel"></div>');
+          count.textContent = filteredItems().length + ' of ' + st.items.filter(it => !st.hidden.has(it.code)).length + ' reels';
+          bindCardVideoEvents();
+          observeSentinel();
+        } else {
+          render();
+        }
+      } catch(e) {
+        const status = grid.querySelector('#seebal-status') || Object.assign(document.createElement('div'), {id:'seebal-status'});
+        status.textContent = 'Error: ' + (e.message||e);
+        if (!status.parentNode) grid.appendChild(status);
+        count.textContent = st.items.length + ' reels';
+      } finally { st.loading = false; }
+    }
+
+    function render() {
+      const items = filteredItems();
+      count.textContent = items.length + ' of ' + st.items.filter(it => !st.hidden.has(it.code)).length + ' reels';
+      grid.innerHTML = items.map(cardHtml).join('') + '<div id="seebal-sentinel"></div>' || '<div id="seebal-status">No reels</div><div id="seebal-sentinel"></div>';
+      bindCardVideoEvents();
+      observeSentinel();
+    }
+
+    function cardHtml(it) {
+        const user = it.author?.username || 'instagram';
+        const v = viral(it);
+        const caption = it.caption || '';
+        return \`<div class="sb-card" data-code="\${esc(it.code)}">
+          \${it.videoUrl ? \`<video src="\${esc(it.videoUrl)}" poster="\${esc(it.thumbnailUrl||'')}" preload="metadata" playsinline loop></video>\` : \`<img src="\${esc(it.thumbnailUrl||'')}" loading="lazy">\`}
+          <span class="sb-viral">\${v ? esc(v.toFixed(1)+'x') : '1x'}</span>
+          <button class="sb-hide" data-hide="\${esc(it.code)}" title="Not interesting">×</button>
+          <button class="sb-play" data-play="\${esc(it.code)}">▶</button>
+          <div class="sb-card-tools">
+            <button class="sb-tool" data-dl="\${esc(it.code)}" title="Download">↓</button>
+          </div>
+          <div class="sb-card-meta">
+            <div class="sb-caption">\${esc(caption)}</div>
+            <div class="sb-card-user">
+              <button class="sb-profile-link" data-open-profile="\${esc(user)}">@\${esc(user)}</button>
+              <button class="sb-add-btn" data-save="\${esc(user)}" data-uid="\${esc(it.author?.id||'')}">+</button>
+            </div>
+            <div class="sb-card-stats">
+              <span>♡ \${esc(fmt(it.likeCount))}</span><span>☰ \${esc(fmt(it.commentCount))}</span>
+              <span>↗ \${esc(fmt(it.shareCount || it.saveCount))}</span><span>👤 \${esc(fmt(it.followerCount || it.author?.followerCount))}</span>
+              <span>◷ \${esc(age(it.takenAt))}</span><span>▷ \${esc(fmt(it.viewCount))}</span>
+            </div>
+            \${dur(it.duration) ? \`<div class="sb-duration">\${esc(dur(it.duration))}</div>\` : ''}
+          </div>
+        </div>\`;
+    }
+
+    function bindCardVideoEvents(root = grid) {
+      grid.querySelectorAll('.sb-card video').forEach(video => {
+        const card = video.closest('.sb-card');
+        if (video.dataset.sbBound) return;
+        video.dataset.sbBound = '1';
+        video.addEventListener('play', () => card?.classList.add('playing'));
+        video.addEventListener('pause', () => card?.classList.remove('playing'));
+        video.addEventListener('ended', () => card?.classList.remove('playing'));
+      });
+    }
+
+    let sentinelObserver = null;
+    function observeSentinel() {
+      const sentinel = document.getElementById('seebal-sentinel');
+      if (!sentinel) return;
+      if (sentinelObserver) sentinelObserver.disconnect();
+      sentinelObserver = new IntersectionObserver(entries => {
+        if (entries.some(entry => entry.isIntersecting) && !st.loading && st.cursor) loadFeed(false);
+      }, { root: gridWrap, rootMargin: '900px 0px 900px 0px' });
+      sentinelObserver.observe(sentinel);
+    }
+
+    shell.addEventListener('click', async e => {
+      const act = e.target.dataset.act;
+      const openProfileNow = e.target.closest('[data-open-profile]')?.dataset.openProfile;
+      if (openProfileNow) {
+        e.stopPropagation();
+        const p = st.profiles.find(x => x.username === openProfileNow);
+        st.activeProfile = { userId: p?.userId || '', username: openProfileNow };
+        loadFeed(true);
+        return;
+      }
+      if (act === 'feed') { st.activeProfile = null; loadFeed(true); }
+      if (act === 'refresh') loadFeed(true);
+      if (act === 'load-more') loadFeed(false);
+      if (act === 'profiles') { sidebar.classList.toggle('open'); if(sidebar.classList.contains('open')) loadProfiles(); }
+      if (act === 'folder') window.postMessage({ type:'SEEBAL_SELECT_FOLDER' },'*');
+      if (act === 'auth') {
+        if (st.loggedIn) {
+          await request('SEEBAL_AUTH_LOGOUT');
+          st.items = []; st.cursor = ''; render();
+        } else {
+          await request('SEEBAL_AUTH_LOGIN');
+        }
+        refreshAuth();
+      }
+      const sortShort = e.target.dataset.sortShort;
+      if (sortShort) { st.sort = sortShort; sortSelect.value = sortShort; render(); }
+      const lim = e.target.dataset.limit;
+      if (lim) {
+        st.limit = Number(lim);
+        limitBox.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.limit === lim));
+        render();
+      }
+      if (act === 'add-profile') {
+        const v = addInput.value.trim(); if(!v) return;
+        addInput.disabled = true;
+        try {
+          const info = await request('SEEBAL_GET_USER_INFO', { username: v });
+          await request('SEEBAL_SAVE_ACCOUNT', { account: { username: info.username, fullName: info.fullName||'', userId: info.id, avatar: info.avatar||'' } });
+          addInput.value = ''; loadProfiles();
+        } catch(err) { alert(err.message||err); }
+        addInput.disabled = false;
+      }
+
+      const del = e.target.dataset.del;
+      if (del) { await request('SEEBAL_REMOVE_ACCOUNT', { username: del }); loadProfiles(); }
+
+      const profileUser = e.target.closest('[data-username]')?.dataset.username;
+      if (profileUser && !e.target.dataset.del) {
+        const p = st.profiles.find(x => x.username === profileUser);
+        st.activeProfile = { userId: p?.userId || '', username: profileUser };
+        loadFeed(true);
+      }
+
+      const openProfile = e.target.dataset.openProfile;
+      if (openProfile) {
+        const p = st.profiles.find(x => x.username === openProfile);
+        st.activeProfile = { userId: p?.userId || '', username: openProfile };
+        loadFeed(true);
+      }
+
+      const save = e.target.dataset.save;
+      if (save) {
+        e.target.textContent = '...';
+        try {
+          const info = await request('SEEBAL_GET_USER_INFO', { username: save });
+          await request('SEEBAL_SAVE_ACCOUNT', { account: { username: info.username, fullName: info.fullName||'', userId: info.id, avatar: info.avatar||'' } });
+          e.target.textContent = 'ok';
+          setTimeout(()=>{ e.target.textContent='+'; }, 1500);
+          loadProfiles();
+        } catch { e.target.textContent='+'; }
+      }
+
+      const play = e.target.dataset.play;
+      if (play) {
+        const card = e.target.closest('.sb-card');
+        const video = card?.querySelector('video');
+        if (video) {
+          if (video.paused) { video.play(); card.classList.add('playing'); }
+          else { video.pause(); card.classList.remove('playing'); }
+        }
+      }
+
+      const dl = e.target.dataset.dl;
+      if (dl) {
+        const it = st.items.find(x => x.code===dl);
+        if (it?.videoUrl) {
+          e.target.textContent = '…';
+          window.postMessage({ type:'SEEBAL_DOWNLOAD_VIDEO', url:it.videoUrl, code:it.code, username:it.author?.username||'instagram' },'*');
+          setTimeout(()=>{ e.target.textContent='↓'; }, 2000);
+        }
+      }
+
+      const hide = e.target.dataset.hide;
+      if (hide) {
+        st.hidden.add(hide);
+        localStorage.setItem('sb_hidden', JSON.stringify([...st.hidden]));
+        render();
+      }
+
+      const card = e.target.closest('.sb-card');
+      if (card && !e.target.closest('button') && !e.target.closest('[data-open-profile]')) {
+        const video = card.querySelector('video');
+        if (video) {
+          if (video.paused) { video.play(); card.classList.add('playing'); }
+          else { video.pause(); card.classList.remove('playing'); }
+        }
+      }
+    });
+
+    searchInput.addEventListener('input', () => { st.search = searchInput.value; render(); });
+    sortSelect.addEventListener('change', () => { st.sort = sortSelect.value; render(); });
+
+    // Infinite scroll
+    gridWrap.addEventListener('scroll', () => {
+      if (!st.loading && gridWrap.scrollTop + gridWrap.clientHeight > gridWrap.scrollHeight - 1000) loadFeed(false);
+    });
+
+    window.addEventListener('message', e => {
+      if (e.data?.type === 'SEEBAL_DOWNLOAD_DONE') {
+        const code = e.data.code;
+        const btn = grid.querySelector(\`[data-dl="\${code}"]\`);
+        if (btn) { btn.textContent = '✓'; setTimeout(()=>btn.textContent='↓', 2000); }
+      }
+    });
+
+    refreshAuth();
+    restoreCache();
+    setTimeout(() => loadFeed(true), 400);
+  })();`;
+}
+
+// в”Ђв”Ђв”Ђ Inject Shell into Instagram page в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+async function injectShell(wc) {
+  try {
+    await wc.insertCSS(SHELL_CSS);
+    await wc.executeJavaScript(buildShellJS(), true);
+  } catch (e) {
+    console.error('[Shell] inject failed:', e.message);
+  }
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
-    width: 1400, height: 900, minWidth: 900, minHeight: 600,
-    x: 80, y: 80,
-    show: true,
-    skipTaskbar: false,
-    backgroundColor: '#0a0a12',
-    title: 'ssibalss_reels',
+    width: 1400, height: 900, minWidth: 960, minHeight: 600,
+    show: false,
+    backgroundColor: '#070707',
+    title: 'SEEBAL REELS',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
+      preload: path.join(__dirname, 'src', 'instagram-shell-preload.js'),
+      contextIsolation: false,
       nodeIntegration: false,
-      webSecurity: false // needed for loading IG thumbnails
+      webSecurity: false
     }
   });
   mainWindow.setMenuBarVisibility(false);
-  mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
-  mainWindow.once('ready-to-show', () => {
-    if (!mainWindow) return;
-    mainWindow.show();
-    mainWindow.focus();
-    mainWindow.moveTop();
+  mainWindow.webContents.setUserAgent(UA);
+  mainWindow.loadURL('https://www.instagram.com/reels/');
+
+  // Inject Shell as soon as the page finishes loading (reliable, no fixed timeout)
+  mainWindow.webContents.on('did-finish-load', async () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const url = mainWindow.webContents.getURL();
+    // Skip auth pages вЂ” don't inject Shell there
+    if (!url.includes('instagram.com') || url.includes('/accounts/login') || url.includes('/challenge')) return;
+    await injectShell(mainWindow.webContents);
   });
-  mainWindow.show();
-  mainWindow.focus();
-  // Open external links (telegram etc) in default browser
+
+  mainWindow.once('ready-to-show', () => { mainWindow?.show(); mainWindow?.focus(); });
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: 'deny' };
+    if (url.startsWith('https://www.instagram.com/')) return { action: 'allow' };
+    shell.openExternal(url); return { action: 'deny' };
   });
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith('file://')) {
-      event.preventDefault();
-      shell.openExternal(url);
-    }
+  mainWindow.webContents.on('will-navigate', (_e, url) => {
+    // Allow instagram navigation (login, reels, etc.)
+    if (url.startsWith('https://www.instagram.com/') || url.startsWith('https://i.instagram.com/')) return;
+    _e.preventDefault(); shell.openExternal(url);
   });
   mainWindow.on('closed', () => { mainWindow = null; stopAllMonitoring(); });
 }
 
-// ─── IPC Handlers ────────────────────────────────────
-ipcMain.handle('check-login', () => checkLoggedIn());
-ipcMain.handle('login', () => openLoginWindow());
+
+// в”Ђв”Ђв”Ђ IPC Handlers в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 ipcMain.handle('logout', async () => {
   await session.defaultSession.clearStorageData({ storages: ['cookies'] });
   return true;
@@ -828,7 +1557,7 @@ ipcMain.handle('toggle-account-hidden', (_e, username) => {
   return list;
 });
 
-// ─── App Lifecycle ────────────────────────────────────
+// в”Ђв”Ђв”Ђ App Lifecycle в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 // Compatibility aliases for the current SEEBAL UI. Instagram logic above stays identical to the working Desktop build.
 ipcMain.handle('auth:status', () => checkLoggedIn());
@@ -847,8 +1576,8 @@ ipcMain.handle('downloads:reel', async (_e, reel) => {
   if (!reel?.videoUrl) throw new Error('This Reels has no video URL');
   const saveDir = getSetting('downloadFolder', app.getPath('downloads'));
   if (!fs.existsSync(saveDir)) fs.mkdirSync(saveDir, { recursive: true });
-  const safeUser = String(reel.author?.username || 'instagram').replace(/[^w.-]+/g, '_');
-  const safeId = String(reel.code || reel.id || Date.now()).replace(/[^w.-]+/g, '_');
+  const safeUser = String(reel.author?.username || 'instagram').replace(/[^\w.-]+/g, '_');
+  const safeId = String(reel.code || reel.id || Date.now()).replace(/[^\w.-]+/g, '_');
   const dest = path.join(saveDir, safeUser + '_' + safeId + '.mp4');
   await downloadFile(reel.videoUrl, dest, safeId);
   return dest;
@@ -859,7 +1588,28 @@ ipcMain.handle('debug:open-log', async () => {
   return true;
 });
 
-// ─── Session Keepalive ────────────────────────────────
+ipcMain.handle('seebal:select-folder', async () => {
+  const currentFolder = getSetting('downloadFolder', app.getPath('downloads'));
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory'],
+    defaultPath: currentFolder
+  });
+  if (!result.canceled && result.filePaths[0]) setSetting('downloadFolder', result.filePaths[0]);
+  return getSetting('downloadFolder', app.getPath('downloads'));
+});
+
+ipcMain.handle('seebal:download-url', async (_event, payload) => {
+  if (!payload?.url) throw new Error('No video URL');
+  const saveDir = getSetting('downloadFolder', app.getPath('downloads'));
+  if (!fs.existsSync(saveDir)) fs.mkdirSync(saveDir, { recursive: true });
+  const safeUser = String(payload.username || 'instagram').replace(/[^\w.-]+/g, '_');
+  const safeCode = String(payload.code || Date.now()).replace(/[^\w.-]+/g, '_');
+  const dest = path.join(saveDir, `${safeUser}_${safeCode}.mp4`);
+  await downloadFile(payload.url, dest, safeCode);
+  return dest;
+});
+
+// в”Ђв”Ђв”Ђ Session Keepalive в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 // Ping Instagram every 15 min while logged in to refresh session cookies
 // and prevent them from expiring during inactivity
 let keepaliveTimer = null;
@@ -867,7 +1617,7 @@ let keepaliveTimer = null;
 async function sessionKeepalive() {
   try {
     const loggedIn = await checkLoggedIn();
-    if (!loggedIn) return; // not logged in — nothing to keep alive
+    if (!loggedIn) return; // not logged in вЂ” nothing to keep alive
     const cookie = await getIGCookies();
     const csrf = await getCSRFToken();
     const response = await net.fetch(
@@ -883,14 +1633,53 @@ async function sessionKeepalive() {
         }
       }
     );
-    console.log(`[Keepalive] Instagram session ping → ${response.status}`);
+    console.log(`[Keepalive] Instagram session ping в†’ ${response.status}`);
   } catch (e) {
     console.warn('[Keepalive] Ping failed (will retry in 15m):', e.message);
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  try {
+    await session.defaultSession.loadExtension(VIDIQ_EXTENSION_PATH, { allowFileAccess: true });
+    fs.appendFileSync(EXTENSION_LOG_FILE, `[${new Date().toISOString()}] loaded ${VIDIQ_EXTENSION_PATH}\n`);
+    console.log('[SEEBAL] vidIQ Instagram extension loaded:', VIDIQ_EXTENSION_PATH);
+  } catch (error) {
+    fs.appendFileSync(EXTENSION_LOG_FILE, `[${new Date().toISOString()}] load failed ${error.stack || error.message || error}\n`);
+    console.error('[SEEBAL] failed to load vidIQ extension:', error);
+  }
   createMainWindow();
+
+  // в”Ђв”Ђв”Ђ Session Guard в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // Intercept all Instagram responses and block any attempt to clear sessionid.
+  // Instagram sometimes sends Set-Cookie: sessionid=; Max-Age=0 to force logout вЂ”
+  // we strip that header so the local cookie stays alive.
+  session.defaultSession.webRequest.onHeadersReceived(
+    { urls: ['*://*.instagram.com/*', '*://instagram.com/*'] },
+    (details, callback) => {
+      const headers = { ...details.responseHeaders };
+      const cookieKey = Object.keys(headers).find(k => k.toLowerCase() === 'set-cookie');
+      if (cookieKey && Array.isArray(headers[cookieKey])) {
+        const before = headers[cookieKey].length;
+        headers[cookieKey] = headers[cookieKey].filter(cookie => {
+          const lower = cookie.toLowerCase();
+          // Block only cookies that CLEAR sessionid (empty value or Max-Age=0)
+          const clearsSession =
+            lower.startsWith('sessionid=;') ||
+            lower.startsWith('sessionid= ;') ||
+            (lower.startsWith('sessionid=') && lower.includes('max-age=0'));
+          if (clearsSession) {
+            console.log('[Session Guard] Blocked Instagram from clearing sessionid');
+            return false;
+          }
+          return true;
+        });
+        if (headers[cookieKey].length === 0) delete headers[cookieKey];
+      }
+      callback({ responseHeaders: headers });
+    }
+  );
+
   // Start keepalive 30s after launch, then every 15 minutes
   setTimeout(() => {
     sessionKeepalive();
@@ -904,3 +1693,4 @@ app.on('window-all-closed', () => {
   app.quit();
 });
 app.on('activate', () => { if (!mainWindow) createMainWindow(); });
+
