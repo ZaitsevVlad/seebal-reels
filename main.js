@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, ipcMain, dialog, Notification, session, net, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification, session, net, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
@@ -1640,13 +1640,17 @@ async function sessionKeepalive() {
 }
 
 app.whenReady().then(async () => {
-  try {
-    await session.defaultSession.loadExtension(VIDIQ_EXTENSION_PATH, { allowFileAccess: true });
-    fs.appendFileSync(EXTENSION_LOG_FILE, `[${new Date().toISOString()}] loaded ${VIDIQ_EXTENSION_PATH}\n`);
-    console.log('[SEEBAL] vidIQ Instagram extension loaded:', VIDIQ_EXTENSION_PATH);
-  } catch (error) {
-    fs.appendFileSync(EXTENSION_LOG_FILE, `[${new Date().toISOString()}] load failed ${error.stack || error.message || error}\n`);
-    console.error('[SEEBAL] failed to load vidIQ extension:', error);
+  if (fs.existsSync(VIDIQ_EXTENSION_PATH)) {
+    try {
+      await session.defaultSession.loadExtension(VIDIQ_EXTENSION_PATH, { allowFileAccess: true });
+      fs.appendFileSync(EXTENSION_LOG_FILE, `[${new Date().toISOString()}] loaded ${VIDIQ_EXTENSION_PATH}\n`);
+      console.log('[SEEBAL] vidIQ Instagram extension loaded:', VIDIQ_EXTENSION_PATH);
+    } catch (error) {
+      fs.appendFileSync(EXTENSION_LOG_FILE, `[${new Date().toISOString()}] load failed ${error.stack || error.message || error}\n`);
+      console.error('[SEEBAL] failed to load vidIQ extension:', error);
+    }
+  } else {
+    console.log('[SEEBAL] vidIQ extension path not found, skipping:', VIDIQ_EXTENSION_PATH);
   }
   createMainWindow();
 
