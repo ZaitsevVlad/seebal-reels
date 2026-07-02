@@ -9,7 +9,11 @@ const { URL } = require('url');
 const IG_APP_ID = '936619743392459';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 const STORE_FILE = path.join(app.getPath('userData'), 'app-store.json');
-const VIDIQ_EXTENSION_PATH = 'C:\\Users\\user\\Downloads\\Telegram Desktop\\vidIQ-Vision-for-YouTube-Chrome-Web-Store';
+const BUNDLED_VIDIQ_EXTENSION_PATH = path.join(__dirname, 'src', 'vendor', 'vidiq-extension');
+const LOCAL_VIDIQ_EXTENSION_PATH = 'C:\\Users\\user\\Downloads\\Telegram Desktop\\vidIQ-Vision-for-YouTube-Chrome-Web-Store';
+const VIDIQ_EXTENSION_PATH = fs.existsSync(BUNDLED_VIDIQ_EXTENSION_PATH)
+  ? BUNDLED_VIDIQ_EXTENSION_PATH
+  : LOCAL_VIDIQ_EXTENSION_PATH;
 const EXTENSION_LOG_FILE = path.join(__dirname, 'seebal-extension.log');
 
 let mainWindow = null;
@@ -1038,6 +1042,7 @@ function buildShellJS() {
       try { localStorage.setItem(cacheKey(), JSON.stringify({ items: st.items, cursor: st.cursor, ts: Date.now() })); } catch {}
     }
     function restoreCache() {
+      if (!st.loggedIn) return;
       try {
         const data = JSON.parse(localStorage.getItem(cacheKey()) || 'null');
         if (data?.items?.length) {
@@ -1053,6 +1058,15 @@ function buildShellJS() {
         authBtn.textContent = st.loggedIn ? 'Sign out IG' : 'Login IG';
         authBtn.classList.toggle('primary', st.loggedIn);
       } catch {}
+    }
+    async function requireAuth() {
+      await refreshAuth();
+      if (st.loggedIn) return true;
+      st.items = [];
+      st.cursor = '';
+      grid.innerHTML = '<div id="seebal-status"><div style="font-size:18px;font-weight:900;margin-bottom:10px">Instagram login required</div><div style="color:#888;margin-bottom:16px">Sign in to Instagram before loading reels.</div><button class="sb-btn primary" data-act="auth">Login IG</button></div><div id="seebal-sentinel"></div>';
+      count.textContent = 'Login required';
+      return false;
     }
 
     function request(type, payload) {
@@ -1170,6 +1184,7 @@ function buildShellJS() {
 
     async function loadFeed(reset) {
       if (st.loading) return;
+      if (!(await requireAuth())) return;
       if (!reset && !st.cursor) return;
       st.loading = true;
       count.textContent = 'Loading...';
@@ -1285,9 +1300,17 @@ function buildShellJS() {
       if (act === 'auth') {
         if (st.loggedIn) {
           await request('SEEBAL_AUTH_LOGOUT');
-          st.items = []; st.cursor = ''; render();
+          st.loggedIn = false;
+          st.items = [];
+          st.cursor = '';
+          localStorage.removeItem('sb_cache_feed');
+          grid.innerHTML = '<div id="seebal-status">Logged out. Login IG to load reels.</div><div id="seebal-sentinel"></div>';
+          count.textContent = 'Login required';
         } else {
           await request('SEEBAL_AUTH_LOGIN');
+          await refreshAuth();
+          if (st.loggedIn) loadFeed(true);
+          return;
         }
         refreshAuth();
       }
@@ -1392,9 +1415,9 @@ function buildShellJS() {
       }
     });
 
-    refreshAuth();
-    restoreCache();
-    setTimeout(() => loadFeed(true), 400);
+    setTimeout(async () => {
+      if (await requireAuth()) loadFeed(true);
+    }, 400);
   })();`;
 }
 

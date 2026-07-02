@@ -12,7 +12,8 @@
   "build": {
     "appId": "com.seebal.reels",
     "productName": "SEEBAL Reels",
-    "copyright": "Copyright © 2026 SEEBAL",
+    "asar": false,
+    "copyright": "Copyright В© 2026 SEEBAL",
     "directories": {
       "output": "dist"
     },
@@ -53,3 +54,4 @@
     "electron-builder": "^24.13.3"
   }
 }
+

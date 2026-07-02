@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Local Instagram Reels Analyzer",
+  "version": "0.1.0",
+  "description": "Local-only Reels discovery, filters, VPH and outlier scoring for Instagram.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://www.instagram.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://www.instagram.com/*"],
+      "css": ["src/content.css"],
+      "js": ["src/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Local Reels Analyzer"
+  }
+}
