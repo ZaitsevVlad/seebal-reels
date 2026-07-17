@@ -1,8 +1,8 @@
 {
-  "name": "seebal-reels",
-  "version": "1.21.0",
-  "description": "SEEBAL Instagram Reels Downloader",
-  "author": "SEEBAL",
+  "name": "ssibalreels-beta",
+  "version": "1.22.0",
+  "description": "ssibalreels(beta) Instagram Reels Downloader",
+  "author": "ssibalhub",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -10,8 +10,8 @@
     "dist:mac": "electron-builder --mac --universal --publish never"
   },
   "build": {
-    "appId": "com.seebal.reels",
-    "productName": "SEEBAL Reels",
+    "appId": "com.ssibal.reels",
+    "productName": "ssibalreels(beta)",
     "asar": false,
     "copyright": "Copyright В© 2026 SEEBAL",
     "directories": {
@@ -20,6 +20,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "build/**/*",
       "src/**/*"
     ],
     "win": {
@@ -29,7 +30,8 @@
           "arch": ["x64"]
         }
       ],
-      "artifactName": "SEEBAL-Reels-Windows.exe"
+      "icon": "build/icon.ico",
+      "artifactName": "ssibalreels-beta-Windows.exe"
     },
     "mac": {
       "target": [
@@ -43,10 +45,11 @@
       "identity": null,
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
-      "artifactName": "SEEBAL-Reels-Mac.zip"
+      "icon": "build/icon.icns",
+      "artifactName": "ssibalreels-beta-Mac.zip"
     },
     "portable": {
-      "artifactName": "SEEBAL-Reels-Windows.exe"
+      "artifactName": "ssibalreels-beta-Windows.exe"
     }
   },
   "devDependencies": {

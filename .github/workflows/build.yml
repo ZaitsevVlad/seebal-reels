@@ -1,23 +1,23 @@
-name: Build & Release SEEBAL Reels
+name: Build & Release ssibalreels(beta)
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Версия (например: 1.2.0)'
+        description: 'Version, for example: 1.22'
         required: true
-        default: '1.1.0'
+        default: '1.22'
       release_notes:
-        description: 'Описание обновления (что нового)'
+        description: 'Release notes'
         required: false
-        default: 'Новая версия SEEBAL Reels'
+        default: 'New ssibalreels(beta) version'
 
 permissions:
   contents: write
 
 jobs:
   build-windows:
-    name: 🪟 Windows
+    name: Windows
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,10 +30,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: win-artifact
-          path: dist/SEEBAL-Reels-Windows.exe
+          path: dist/ssibalreels-beta-Windows.exe
 
   build-mac:
-    name: 🍎 macOS Universal (arm64 + x64)
+    name: macOS Universal
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -42,64 +42,78 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm install
+      - name: Build macOS icon
+        run: |
+          mkdir -p build/icon.iconset
+          sips -z 16 16 build/icon.png --out build/icon.iconset/icon_16x16.png
+          sips -z 32 32 build/icon.png --out build/icon.iconset/icon_16x16@2x.png
+          sips -z 32 32 build/icon.png --out build/icon.iconset/icon_32x32.png
+          sips -z 64 64 build/icon.png --out build/icon.iconset/icon_32x32@2x.png
+          sips -z 128 128 build/icon.png --out build/icon.iconset/icon_128x128.png
+          sips -z 256 256 build/icon.png --out build/icon.iconset/icon_128x128@2x.png
+          sips -z 256 256 build/icon.png --out build/icon.iconset/icon_256x256.png
+          sips -z 512 512 build/icon.png --out build/icon.iconset/icon_256x256@2x.png
+          sips -z 512 512 build/icon.png --out build/icon.iconset/icon_512x512.png
+          sips -z 1024 1024 build/icon.png --out build/icon.iconset/icon_512x512@2x.png
+          iconutil -c icns build/icon.iconset -o build/icon.icns
       - run: npm run dist:mac
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: true
-      - name: Упаковать .app + лаунчер в один архив
+      - name: Pack app and launcher
         run: |
           mkdir -p ./mac-release
-          cp -R "dist/mac-universal/SEEBAL Reels.app" ./mac-release/
-          cp scripts/mac-launcher.command "./mac-release/Запустить SEEBAL Reels.command"
-          chmod +x "./mac-release/Запустить SEEBAL Reels.command"
-          cd mac-release && zip -r "../SEEBAL-Reels-Mac.zip" . && cd ..
+          cp -R "dist/mac-universal/ssibalreels(beta).app" ./mac-release/
+          cp scripts/mac-launcher.command "./mac-release/Run ssibalreels(beta).command"
+          chmod +x "./mac-release/Run ssibalreels(beta).command"
+          cd mac-release && zip -r "../ssibalreels-beta-Mac.zip" . && cd ..
       - uses: actions/upload-artifact@v4
         with:
           name: mac-artifact
-          path: SEEBAL-Reels-Mac.zip
+          path: ssibalreels-beta-Mac.zip
 
   release:
-    name: 🚀 Создать релиз
+    name: Create release
     needs: [build-windows, build-mac]
     runs-on: ubuntu-latest
     steps:
-      - name: Скачать Windows артефакт
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: win-artifact
           path: ./release-files
-
-      - name: Скачать macOS артефакт
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: mac-artifact
           path: ./release-files
-
-      - name: Создать GitHub Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.event.inputs.version }}
-          name: "SEEBAL Reels v${{ github.event.inputs.version }}"
+          name: "ssibalreels(beta) v${{ github.event.inputs.version }}"
           body: |
-            ## 📥 Скачать
+            ## Download
 
-            | Платформа | Файл |
-            |-----------|------|
-            | 🪟 Windows | `SEEBAL-Reels-Windows.exe` — просто запусти |
-            | 🍎 macOS | `SEEBAL-Reels-Mac.zip` — работает на M1/M2/M3/M4 и Intel |
+            | Platform | File |
+            | --- | --- |
+            | Windows | `ssibalreels-beta-Windows.exe` |
+            | macOS | `ssibalreels-beta-Mac.zip` |
 
-            ---
+            ## Telegram
 
-            ## 📝 Что нового
+            https://t.me/+ITA6v8UbxblmMDNi
+
+            ## Site
+
+            https://ssibalhub.com
+
+            ## Changes
 
             ${{ github.event.inputs.release_notes }}
 
-            ---
-
-            > **Mac:** при первом запуске правый клик → Open → Open
+            > Mac: on first launch use right click -> Open -> Open.
           files: |
-            ./release-files/SEEBAL-Reels-Windows.exe
-            ./release-files/SEEBAL-Reels-Mac.zip
+            ./release-files/ssibalreels-beta-Windows.exe
+            ./release-files/ssibalreels-beta-Mac.zip
           draft: false
           prerelease: false
         env:

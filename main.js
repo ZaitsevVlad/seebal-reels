@@ -14,6 +14,7 @@ const STORE_FILE = path.join(app.getPath('userData'), 'app-store.json');
 const BUNDLED_VIDIQ_EXTENSION_PATH = path.join(__dirname, 'src', 'vendor', 'vidiq-extension');
 const VIDIQ_EXTENSION_PATH = BUNDLED_VIDIQ_EXTENSION_PATH;
 const EXTENSION_LOG_FILE = path.join(__dirname, 'seebal-extension.log');
+const APP_ICON = path.join(__dirname, 'build', 'icon.png');
 
 let mainWindow = null;
 let monitorTimers = {};
@@ -920,9 +921,9 @@ function startMonitoring() {
           if (lastSeen && latest.id.toString() !== lastSeen) {
             setSetting(`lastReel_${acc.username}`, latest.id.toString());
             new Notification({
-              title: 'РќРѕРІС‹Р№ Reels!',
+              title: 'ssibalreels(beta)',
               body: `@${acc.username} РѕРїСѓР±Р»РёРєРѕРІР°Р» РЅРѕРІС‹Р№ Reels`,
-              icon: path.join(__dirname, 'src', 'icon.png')
+              icon: APP_ICON
             }).show();
             if (mainWindow) mainWindow.webContents.send('new-reel-detected', { username: acc.username });
           } else if (!lastSeen && latest.id) {
@@ -1014,31 +1015,37 @@ async function injectInstagramAnalyzer() {
 // в”Ђв”Ђв”Ђ Shell CSS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 const SHELL_CSS = `
   html.sb-html-on, html.sb-html-on body{width:100vw!important;height:100vh!important;max-width:100vw!important;overflow:hidden!important;margin:0!important}
-  #seebal-shell{position:fixed;left:0;top:0;width:100vw;height:100vh;max-width:100vw;max-height:100vh;z-index:2147483600;background:#070707;color:#f0f0f0;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+  #seebal-shell{position:fixed;left:0;top:0;width:100vw;height:100vh;max-width:100vw;max-height:100vh;z-index:2147483600;background:#111315;color:#ece8e1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden}
   #seebal-shell *{box-sizing:border-box}
-  #seebal-topbar{height:58px;min-height:58px;display:flex;align-items:center;gap:10px;padding:0 18px;border-bottom:1px solid #1e1e1e;background:#050505;flex-shrink:0}
-  #seebal-brand{font-weight:900;font-size:17px;letter-spacing:.06em;color:#fff;margin-right:4px}
-  #seebal-brand span{color:#5b9bff}
-  .sb-btn{border:1px solid #2a2a2a;background:#131313;color:#e0e0e0;border-radius:8px;padding:7px 13px;font-size:13px;font-weight:700;cursor:pointer;transition:background .12s,border-color .12s}
-  .sb-btn:hover{background:#202020;border-color:#444}
-  .sb-btn.primary{background:#2878ff;border-color:#2878ff;color:#fff}
-  .sb-btn.primary:hover{background:#1a6aee}
-  .sb-field{height:36px;border:1px solid #262626;background:#111;color:#ddd;border-radius:9px;padding:0 12px;font-size:13px;outline:none}
+  #seebal-topbar{height:56px;min-height:56px;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid #24282c;background:#15181b;flex-shrink:0}
+  #seebal-brand{font-weight:900;font-size:15px;letter-spacing:.04em;color:#f4efe6;margin-right:4px;text-transform:lowercase;white-space:nowrap}
+  #seebal-brand span{color:#ff6a3d;margin-left:4px}
+  .sb-btn{border:1px solid #2b3035;background:#1a1e22;color:#d8d2c8;border-radius:6px;padding:7px 12px;font-size:13px;font-weight:700;cursor:pointer;transition:background .12s,border-color .12s,color .12s}
+  .sb-btn:hover{background:#22272c;border-color:#3a4249;color:#fff}
+  .sb-btn.primary{background:#ff6a3d;border-color:#ff6a3d;color:#160d09}
+  .sb-btn.primary:hover{background:#ff7d55}
+  .sb-link-btn{border:1px solid #30414a;background:#172328;color:#8ee8f2;border-radius:6px;padding:7px 10px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap}
+  .sb-link-btn:hover{border-color:#4cc9f0;color:#f4feff}
+  .sb-field{height:34px;border:1px solid #2b3035;background:#121518;color:#d8d2c8;border-radius:6px;padding:0 11px;font-size:13px;outline:none}
   .sb-search{min-width:260px}
-  .sb-segments{display:flex;border:1px solid #262626;border-radius:9px;overflow:hidden;background:#101010}
-  .sb-segments button{height:34px;min-width:42px;border:0;border-right:1px solid #262626;background:transparent;color:#888;font-weight:800;cursor:pointer}
-  .sb-segments button:last-child{border-right:0}.sb-segments button.active{background:#2878ff;color:#fff}
-  #seebal-count{margin-left:auto;color:#888;font-size:12px;white-space:nowrap}
+  .sb-segments{display:flex;border:1px solid #2b3035;border-radius:6px;overflow:hidden;background:#121518}
+  .sb-segments button{height:32px;min-width:40px;border:0;border-right:1px solid #2b3035;background:transparent;color:#8e8a83;font-weight:800;cursor:pointer}
+  .sb-segments button:last-child{border-right:0}.sb-segments button.active{background:#ff6a3d;color:#160d09}
+  #seebal-count{margin-left:auto;color:#9a948b;font-size:12px;white-space:nowrap}
   #seebal-body{flex:1;display:flex;min-height:0;width:100%;max-width:100%;overflow:hidden}
-  #seebal-rail{width:64px;flex-shrink:0;background:#0b0b0b;border-right:1px solid #1a1a1a;display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 8px}
-  .sb-rail-btn{width:42px;height:42px;border:1px solid #242424;border-radius:12px;background:#151515;color:#aaa;font-size:17px;cursor:pointer;display:grid;place-items:center;line-height:1}
-  .sb-rail-btn:hover,.sb-rail-btn.active{background:#202020;color:#fff;border-color:#3a3a3a}
-  #seebal-sidebar{width:0;overflow:hidden;border-right:1px solid #1a1a1a;background:#080808;transition:width .2s;flex-shrink:0;display:flex;flex-direction:column}
+  #seebal-rail{width:58px;flex-shrink:0;background:#14171a;border-right:1px solid #24282c;display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 8px}
+  .sb-rail-btn{width:38px;height:38px;border:1px solid #2a2f34;border-radius:8px;background:#191d21;color:#9a948b;font-size:16px;cursor:pointer;display:grid;place-items:center;line-height:1}
+  .sb-rail-btn:hover,.sb-rail-btn.active{background:#21262b;color:#f4efe6;border-color:#ff6a3d}
+  #seebal-sidebar{width:0;overflow:hidden;border-right:1px solid #24282c;background:#121518;transition:width .2s;flex-shrink:0;display:flex;flex-direction:column}
   #seebal-sidebar.open{width:280px}
-  #seebal-sidebar-inner{width:280px;padding:14px;overflow-y:auto;flex:1}
-  #seebal-sidebar h3{margin:0 0 10px;font-size:13px;color:#888;text-transform:uppercase;letter-spacing:.08em}
-  .sb-profile-item{display:grid;grid-template-columns:36px 1fr auto;gap:8px;align-items:center;padding:9px 10px;border:1px solid #1d1d1d;border-radius:8px;margin-bottom:7px;background:#0f0f0f;cursor:pointer;transition:border-color .12s,background .12s}
-  .sb-profile-item:hover{border-color:#333;background:#151515}
+  #seebal-sidebar-inner{width:280px;padding:14px;overflow-y:auto;flex:1;scrollbar-width:thin;scrollbar-color:#3a4249 transparent}
+  #seebal-sidebar-inner::-webkit-scrollbar{width:5px}#seebal-sidebar-inner::-webkit-scrollbar-thumb{background:#3a4249;border-radius:999px}#seebal-sidebar-inner::-webkit-scrollbar-track{background:transparent}
+  #seebal-sidebar h3{margin:0 0 10px;font-size:12px;color:#9a948b;text-transform:uppercase;letter-spacing:.08em}
+  .sb-promo{border:1px solid #2b3035;background:#171b1f;border-radius:8px;padding:10px;margin:0 0 12px}
+  .sb-promo strong{display:block;font-size:12px;color:#f4efe6;margin-bottom:8px;letter-spacing:.02em}
+  .sb-promo-actions{display:flex;gap:6px;flex-wrap:wrap}
+  .sb-profile-item{display:grid;grid-template-columns:36px 1fr auto;gap:8px;align-items:center;padding:9px 10px;border:1px solid #24292e;border-radius:7px;margin-bottom:7px;background:#171b1f;cursor:pointer;transition:border-color .12s,background .12s}
+  .sb-profile-item:hover{border-color:#3a4249;background:#1b2025}
   .sb-profile-item img{width:36px;height:36px;border-radius:50%;object-fit:cover;background:#1a1a1a}
   .sb-profile-avatar{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:#1a1a1a;color:#777;font-size:13px;font-weight:900;overflow:hidden;text-transform:uppercase}
   .sb-profile-avatar img{width:100%;height:100%;display:block}
@@ -1047,13 +1054,13 @@ const SHELL_CSS = `
   .sb-profile-del{border:0;background:transparent;color:#555;font-size:16px;cursor:pointer;padding:2px 6px;border-radius:4px}
   .sb-profile-del:hover{color:#ff6b6b}
   .sb-add-form{display:flex;gap:6px;margin-bottom:12px}
-  .sb-add-form input{flex:1;background:#111;border:1px solid #2a2a2a;border-radius:7px;padding:8px 10px;color:#e0e0e0;font-size:13px}
+  .sb-add-form input{flex:1;background:#121518;border:1px solid #2b3035;border-radius:6px;padding:8px 10px;color:#d8d2c8;font-size:13px}
   .sb-add-form input::placeholder{color:#444}
   #seebal-grid-wrap{flex:1;min-width:0;width:100%;max-width:100%;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
   #seebal-grid-wrap::-webkit-scrollbar{width:0;height:0;display:none}
   #seebal-grid{width:100%;max-width:100%;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px;padding:18px;align-content:start;overflow:hidden}
-  .sb-card{background:#111;border:1px solid #1e1e1e;border-radius:10px;overflow:hidden;position:relative;cursor:pointer;transition:transform .13s,border-color .13s}
-  .sb-card:hover{transform:translateY(-2px);border-color:#3a3a3a}
+  .sb-card{background:#171b1f;border:1px solid #24292e;border-radius:8px;overflow:hidden;position:relative;cursor:pointer;transition:border-color .13s}
+  .sb-card:hover{border-color:#3a4249}
   .sb-card video,.sb-card img{width:100%;aspect-ratio:9/16;object-fit:cover;display:block;background:#0a0a0a}
   .sb-card.playing .sb-play{display:none}
   .sb-card-meta{padding:10px 12px;font-size:12px}
@@ -1066,12 +1073,13 @@ const SHELL_CSS = `
   .sb-tool{width:38px;height:38px;border:0;background:rgba(255,255,255,.92);color:#111;border-radius:999px;font-size:17px;font-weight:900;cursor:pointer;display:grid;place-items:center;box-shadow:0 8px 24px rgba(0,0,0,.35)}
   .sb-hide{position:absolute;right:9px;top:9px;width:30px;height:30px;border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.55);color:#fff;border-radius:999px;opacity:0;cursor:pointer;font-weight:900}
   .sb-card:hover .sb-hide{opacity:1}
-  .sb-viral{position:absolute;right:9px;top:9px;background:#d21462;color:#fff;border-radius:7px;padding:6px 8px;font-size:12px;font-weight:900}
+  .sb-viral{position:absolute;right:9px;top:9px;background:#ff6a3d;color:#160d09;border-radius:6px;padding:6px 8px;font-size:12px;font-weight:900}
   .sb-card:hover .sb-viral{right:45px}
   .sb-play{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);width:50px;height:50px;border-radius:50%;border:0;background:rgba(255,255,255,.85);color:#111;font-size:20px;opacity:0;transition:.13s;cursor:pointer}
   .sb-card:hover .sb-play{opacity:1}
   .sb-duration{position:absolute;right:9px;bottom:124px;background:rgba(0,0,0,.72);border-radius:7px;padding:4px 6px;font-weight:900;font-size:12px;z-index:3}
-  .sb-add-btn{border:0;background:#1e1e1e;color:#bbb;border-radius:50%;width:22px;height:22px;font-size:14px;cursor:pointer;line-height:1;flex-shrink:0}
+  .sb-add-btn{border:1px solid #2b3035;background:#1a1e22;color:#d8d2c8;border-radius:6px;width:24px;height:24px;font-size:14px;cursor:pointer;line-height:1;flex-shrink:0}
+  .sb-add-btn.saved{background:#17302f;border-color:#2f7771;color:#74f2df;cursor:default}
   .sb-profile-link{border:0;background:transparent;color:#e0e0e0;font:inherit;font-weight:800;padding:0;cursor:pointer;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .sb-profile-link:hover{color:#8bb6ff}
   #seebal-status{padding:40px;text-align:center;color:#555;font-size:14px;grid-column:1/-1}
@@ -1093,7 +1101,7 @@ function buildShellJS() {
     shell.id = 'seebal-shell';
     shell.innerHTML = \`
       <div id="seebal-topbar">
-        <div id="seebal-brand">SEEBAL<span>REELS</span></div>
+        <div id="seebal-brand">ssibalreels<span>(beta)</span></div>
         <button class="sb-btn primary" data-act="feed">Feed</button>
         <button class="sb-btn" data-act="refresh">Refresh</button>
         <select class="sb-field" id="sb-sort">
@@ -1124,6 +1132,13 @@ function buildShellJS() {
         <div id="seebal-sidebar">
           <div id="seebal-sidebar-inner">
             <h3>Profiles</h3>
+            <div class="sb-promo">
+              <strong>НАШ ТЕЛЕГРАММ КАНАЛ</strong>
+              <div class="sb-promo-actions">
+                <button class="sb-link-btn" data-open-url="https://t.me/+ITA6v8UbxblmMDNi">Telegram</button>
+                <button class="sb-link-btn" data-open-url="https://ssibalhub.com">Site</button>
+              </div>
+            </div>
             <div class="sb-add-form">
               <input id="sb-add-input" placeholder="@username or link" />
               <button class="sb-btn" data-act="add-profile">+</button>
@@ -1191,6 +1206,10 @@ function buildShellJS() {
     }
     function itemAuthor(it) {
       return String(it.author?.username || '').toLowerCase();
+    }
+    function isSavedUser(username) {
+      const normalized = String(username || '').toLowerCase();
+      return !!normalized && st.profiles.some(p => String(p.username || '').toLowerCase() === normalized);
     }
     function isHiddenItem(it) {
       if (st.hidden.has(it.code)) return true;
@@ -1339,9 +1358,10 @@ function buildShellJS() {
       return { items: found.items, cursor: found.connection?.page_info?.end_cursor || '', hasMore: !!found.connection?.page_info?.has_next_page };
     }
 
-    async function loadProfiles() {
+    async function loadProfiles(refreshCards = false) {
       try { st.profiles = await request('SEEBAL_GET_SAVED_ACCOUNTS') || []; } catch {}
       renderProfiles();
+      if (refreshCards && st.items.length) render();
     }
 
     function renderProfiles() {
@@ -1426,6 +1446,7 @@ function buildShellJS() {
 
     function cardHtml(it) {
         const user = it.author?.username || 'instagram';
+        const savedUser = isSavedUser(user);
         const v = viral(it);
         const caption = it.caption || '';
         return \`<div class="sb-card" data-code="\${esc(it.code)}">
@@ -1440,7 +1461,7 @@ function buildShellJS() {
             <div class="sb-caption">\${esc(caption)}</div>
             <div class="sb-card-user">
               <button class="sb-profile-link" data-open-profile="\${esc(user)}">@\${esc(user)}</button>
-              <button class="sb-add-btn" data-save="\${esc(user)}" data-uid="\${esc(it.author?.id||'')}">+</button>
+              <button class="sb-add-btn \${savedUser ? 'saved' : ''}" \${savedUser ? 'data-saved="1"' : \`data-save="\${esc(user)}" data-uid="\${esc(it.author?.id||'')}"\`} title="\${savedUser ? 'Saved profile' : 'Save profile'}">\${savedUser ? '✓' : '+'}</button>
             </div>
             <div class="sb-card-stats">
               <span>♡ \${esc(fmt(it.likeCount))}</span><span>☰ \${esc(fmt(it.commentCount))}</span>
@@ -1485,6 +1506,12 @@ function buildShellJS() {
     }
 
     shell.addEventListener('click', async e => {
+      const openUrl = e.target.closest('[data-open-url]')?.dataset.openUrl;
+      if (openUrl) {
+        e.preventDefault();
+        window.open(openUrl, '_blank', 'noopener,noreferrer');
+        return;
+      }
       const act = e.target.dataset.act;
       const openProfileNow = e.target.closest('[data-open-profile]')?.dataset.openProfile;
       if (openProfileNow) {
@@ -1497,7 +1524,7 @@ function buildShellJS() {
       if (act === 'feed') { st.activeProfile = null; loadFeed(true); }
       if (act === 'refresh') loadFeed(true);
       if (act === 'load-more') loadFeed(false);
-      if (act === 'profiles') { sidebar.classList.toggle('open'); if(sidebar.classList.contains('open')) loadProfiles(); }
+        if (act === 'profiles') { sidebar.classList.toggle('open'); if(sidebar.classList.contains('open')) loadProfiles(true); }
       if (act === 'folder') window.postMessage({ type:'SEEBAL_SELECT_FOLDER' },'*');
       if (act === 'auth') {
         if (st.loggedIn) {
@@ -1531,13 +1558,13 @@ function buildShellJS() {
         try {
           const info = await request('SEEBAL_GET_USER_INFO', { username: v });
           await request('SEEBAL_SAVE_ACCOUNT', { account: { username: info.username, fullName: info.fullName||'', userId: info.id, avatar: info.avatar||'' } });
-          addInput.value = ''; loadProfiles();
+          addInput.value = ''; loadProfiles(true);
         } catch(err) { alert(err.message||err); }
         addInput.disabled = false;
       }
 
       const del = e.target.dataset.del;
-      if (del) { await request('SEEBAL_REMOVE_ACCOUNT', { username: del }); loadProfiles(); }
+      if (del) { await request('SEEBAL_REMOVE_ACCOUNT', { username: del }); loadProfiles(true); }
 
       const profileUser = e.target.closest('[data-username]')?.dataset.username;
       if (profileUser && !e.target.dataset.del) {
@@ -1561,7 +1588,7 @@ function buildShellJS() {
           await request('SEEBAL_SAVE_ACCOUNT', { account: { username: info.username, fullName: info.fullName||'', userId: info.id, avatar: info.avatar||'' } });
           e.target.textContent = 'ok';
           setTimeout(()=>{ e.target.textContent='+'; }, 1500);
-          loadProfiles();
+          loadProfiles(true);
         } catch { e.target.textContent='+'; }
       }
 
@@ -1637,7 +1664,10 @@ function buildShellJS() {
     });
 
     setTimeout(async () => {
-      if (await requireAuth()) loadFeed(true);
+      if (await requireAuth()) {
+        loadProfiles(true);
+        loadFeed(true);
+      }
     }, 400);
   })();`;
 }
@@ -1656,8 +1686,9 @@ function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1400, height: 900, minWidth: 960, minHeight: 600,
     show: false,
-    backgroundColor: '#070707',
-    title: 'SEEBAL REELS',
+    backgroundColor: '#111315',
+    title: 'ssibalreels(beta)',
+    icon: APP_ICON,
     webPreferences: {
       preload: path.join(__dirname, 'src', 'instagram-shell-preload.js'),
       contextIsolation: false,
