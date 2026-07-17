@@ -10,6 +10,8 @@ const IG_APP_ID = '936619743392459';
 const UA = process.platform === 'darwin'
   ? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
   : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+const USER_DATA_DIR = path.join(app.getPath('appData'), 'seebal-reels');
+app.setPath('userData', USER_DATA_DIR);
 const STORE_FILE = path.join(app.getPath('userData'), 'app-store.json');
 const BUNDLED_VIDIQ_EXTENSION_PATH = path.join(__dirname, 'src', 'vendor', 'vidiq-extension');
 const VIDIQ_EXTENSION_PATH = BUNDLED_VIDIQ_EXTENSION_PATH;
@@ -1044,6 +1046,7 @@ const SHELL_CSS = `
   .sb-promo{border:1px solid #2b3035;background:#171b1f;border-radius:8px;padding:10px;margin:0 0 12px}
   .sb-promo strong{display:block;font-size:12px;color:#f4efe6;margin-bottom:8px;letter-spacing:.02em}
   .sb-promo-actions{display:flex;gap:6px;flex-wrap:wrap}
+  .sb-promo .sb-link-btn{white-space:normal;overflow-wrap:anywhere;text-align:left;line-height:1.25}
   .sb-profile-item{display:grid;grid-template-columns:36px 1fr auto;gap:8px;align-items:center;padding:9px 10px;border:1px solid #24292e;border-radius:7px;margin-bottom:7px;background:#171b1f;cursor:pointer;transition:border-color .12s,background .12s}
   .sb-profile-item:hover{border-color:#3a4249;background:#1b2025}
   .sb-profile-item img{width:36px;height:36px;border-radius:50%;object-fit:cover;background:#1a1a1a}
@@ -1058,6 +1061,10 @@ const SHELL_CSS = `
   .sb-add-form input::placeholder{color:#444}
   #seebal-grid-wrap{flex:1;min-width:0;width:100%;max-width:100%;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
   #seebal-grid-wrap::-webkit-scrollbar{width:0;height:0;display:none}
+  #seebal-promo-strip{position:sticky;top:0;z-index:8;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 18px;border-bottom:1px solid #24282c;background:rgba(17,19,21,.96);backdrop-filter:blur(10px);font-size:12px;color:#9a948b}
+  #seebal-promo-strip strong{color:#f4efe6;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  .sb-visible-link{border:0;background:transparent;color:#8ee8f2;font:inherit;font-weight:800;padding:0;cursor:pointer;text-decoration:none}
+  .sb-visible-link:hover{color:#f4feff;text-decoration:underline}
   #seebal-grid{width:100%;max-width:100%;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px;padding:18px;align-content:start;overflow:hidden}
   .sb-card{background:#171b1f;border:1px solid #24292e;border-radius:8px;overflow:hidden;position:relative;cursor:pointer;transition:border-color .13s}
   .sb-card:hover{border-color:#3a4249}
@@ -1135,8 +1142,8 @@ function buildShellJS() {
             <div class="sb-promo">
               <strong>НАШ ТЕЛЕГРАММ КАНАЛ</strong>
               <div class="sb-promo-actions">
-                <button class="sb-link-btn" data-open-url="https://t.me/+ITA6v8UbxblmMDNi">Telegram</button>
-                <button class="sb-link-btn" data-open-url="https://ssibalhub.com">Site</button>
+                <button class="sb-link-btn" data-open-url="https://t.me/+ITA6v8UbxblmMDNi">https://t.me/+ITA6v8UbxblmMDNi</button>
+                <button class="sb-link-btn" data-open-url="https://ssibalhub.com">https://ssibalhub.com</button>
               </div>
             </div>
             <div class="sb-add-form">
@@ -1147,6 +1154,11 @@ function buildShellJS() {
           </div>
         </div>
         <div id="seebal-grid-wrap">
+          <div id="seebal-promo-strip">
+            <strong>НАШ ТЕЛЕГРАММ КАНАЛ</strong>
+            <button class="sb-visible-link" data-open-url="https://t.me/+ITA6v8UbxblmMDNi">https://t.me/+ITA6v8UbxblmMDNi</button>
+            <button class="sb-visible-link" data-open-url="https://ssibalhub.com">https://ssibalhub.com</button>
+          </div>
           <div id="seebal-grid"><div id="seebal-status">Loading...</div><div id="seebal-sentinel"></div></div>
         </div>
       </div>
