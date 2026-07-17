@@ -40,9 +40,12 @@ window.addEventListener('message', async (event) => {
     }
 
     if (data.type === 'SEEBAL_FEED_REQUEST') {
-      if (data.userId) {
+      if (data.userId || data.username) {
         // Load profile reels
-        result = await ipcRenderer.invoke('profile:user-reels', data.userId, data.cursor || '');
+        result = await ipcRenderer.invoke('profile:user-reels', {
+          userId: data.userId || '',
+          username: data.username || ''
+        }, data.cursor || '');
       } else {
         result = await ipcRenderer.invoke('feed:recommendations', data.cursor || '');
       }

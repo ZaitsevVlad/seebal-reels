@@ -7,24 +7,25 @@ const { URL } = require('url');
 
 // в”Ђв”Ђв”Ђ Constants в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 const IG_APP_ID = '936619743392459';
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+const UA = process.platform === 'darwin'
+  ? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+  : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 const STORE_FILE = path.join(app.getPath('userData'), 'app-store.json');
 const BUNDLED_VIDIQ_EXTENSION_PATH = path.join(__dirname, 'src', 'vendor', 'vidiq-extension');
-const LOCAL_VIDIQ_EXTENSION_PATH = 'C:\\Users\\user\\Downloads\\Telegram Desktop\\vidIQ-Vision-for-YouTube-Chrome-Web-Store';
-const VIDIQ_EXTENSION_PATH = fs.existsSync(BUNDLED_VIDIQ_EXTENSION_PATH)
-  ? BUNDLED_VIDIQ_EXTENSION_PATH
-  : LOCAL_VIDIQ_EXTENSION_PATH;
+const VIDIQ_EXTENSION_PATH = BUNDLED_VIDIQ_EXTENSION_PATH;
 const EXTENSION_LOG_FILE = path.join(__dirname, 'seebal-extension.log');
 
 let mainWindow = null;
 let monitorTimers = {};
 let instagramAgentWindow = null;
+let instagramAgentCloseTimer = null;
 const igCooldowns = new Map();
 
 const IG_RATE_LIMIT_MS = 2 * 60 * 1000;
 const USER_CACHE_MS = 15 * 60 * 1000;
 const userInfoCache = new Map();
 const reelMetricsCache = new Map();
+const avatarCache = new Map();
 
 // в”Ђв”Ђв”Ђ Simple JSON Store в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function loadStore() {
@@ -39,6 +40,18 @@ function getSetting(key, def) {
 }
 function setSetting(key, val) {
   const s = loadStore(); s[key] = val; saveStore(s);
+}
+
+function normalizeInstagramUsername(value) {
+  let text = String(value || '').trim();
+  if (!text) return '';
+  text = text
+    .replace(/^@+/, '')
+    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, '')
+    .replace(/^(www\.)?instagram\.com\//i, '')
+    .replace(/^\/+|\/+$/g, '');
+  text = text.split(/[/?#]/)[0].replace(/^@+/, '').toLowerCase();
+  return /^[a-z0-9._]+$/.test(text) ? text : '';
 }
 
 // в”Ђв”Ђв”Ђ Instagram Cookie Helpers в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -156,6 +169,10 @@ function waitForLoad(win, timeout = 12000) {
 }
 
 async function getInstagramAgentWindow(url) {
+  if (instagramAgentCloseTimer) {
+    clearTimeout(instagramAgentCloseTimer);
+    instagramAgentCloseTimer = null;
+  }
   if (!instagramAgentWindow || instagramAgentWindow.isDestroyed()) {
     instagramAgentWindow = new BrowserWindow({
       width: 420,
@@ -183,6 +200,22 @@ async function getInstagramAgentWindow(url) {
   return instagramAgentWindow;
 }
 
+function closeInstagramAgentWindow() {
+  if (instagramAgentCloseTimer) {
+    clearTimeout(instagramAgentCloseTimer);
+    instagramAgentCloseTimer = null;
+  }
+  if (instagramAgentWindow && !instagramAgentWindow.isDestroyed()) {
+    instagramAgentWindow.destroy();
+  }
+  instagramAgentWindow = null;
+}
+
+function scheduleInstagramAgentClose() {
+  if (instagramAgentCloseTimer) clearTimeout(instagramAgentCloseTimer);
+  instagramAgentCloseTimer = setTimeout(closeInstagramAgentWindow, 60 * 1000);
+}
+
 async function collectInstagramPageReels(url, scrolls = 3) {
   if (!(await checkLoggedIn())) throw new Error('Instagram С‚СЂРµР±СѓРµС‚ Р°РІС‚РѕСЂРёР·Р°С†РёСЋ. РќР°Р¶РјРёС‚Рµ В«Р’РѕР№С‚Рё РІ InstagramВ».');
   const win = await getInstagramAgentWindow(url);
@@ -207,6 +240,7 @@ async function collectInstagramPageReels(url, scrolls = 3) {
   }
 
   const items = [...collected.values()].filter(item => item.thumbnailUrl || item.videoUrl);
+  scheduleInstagramAgentClose();
   return { items, hasMore: true, cursor: `dom:${Date.now()}` };
 }
 
@@ -334,7 +368,8 @@ async function fetchIG(url, method = 'GET', body = null, retries = 0, options = 
 
 // в”Ђв”Ђв”Ђ Instagram: Get User Info в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async function getUserInfo(username) {
-  const normalized = username.trim().replace(/^@/, '').toLowerCase();
+  const normalized = normalizeInstagramUsername(username);
+  if (!normalized) throw new Error('Instagram user not found');
   const cached = userInfoCache.get(normalized);
   if (cached && Date.now() - cached.ts < USER_CACHE_MS) return cached.user;
 
@@ -343,8 +378,8 @@ async function getUserInfo(username) {
     const d = await fetchIG(`https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(normalized)}`);
     user = d?.data?.user;
   } catch (e) {
-    if (e.code !== 'IG_RATE_LIMITED' && e.code !== 'IG_COOLDOWN') throw e;
-    console.warn(`[IG API] web_profile_info failed for ${normalized}; trying topsearch fallback`);
+    if (e.code === 'IG_AUTH') throw e;
+    console.warn(`[IG API] web_profile_info failed for ${normalized}; trying topsearch fallback:`, e.message);
   }
 
   if (!user) {
@@ -367,8 +402,7 @@ async function getUserInfo(username) {
       };
     }
   }
-
-  if (!user?.id) throw new Error('РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ');
+  if (!user?.id) throw new Error('Instagram user not found');
   const info = {
     id: user.id,
     username: user.username,
@@ -381,10 +415,11 @@ async function getUserInfo(username) {
     _fromSearch: !!user._fromSearch
   };
   userInfoCache.set(normalized, { ts: Date.now(), user: info });
+  if (info.username) userInfoCache.set(String(info.username).toLowerCase(), { ts: Date.now(), user: info });
 
   // Auto-update saved account data when we successfully fetch user info
   const savedAccounts = getSetting('savedAccounts', []);
-  const savedIdx = savedAccounts.findIndex(a => a.username === info.username);
+  const savedIdx = savedAccounts.findIndex(a => String(a.username || '').toLowerCase() === String(info.username || '').toLowerCase());
   if (savedIdx >= 0) {
     savedAccounts[savedIdx] = {
       ...savedAccounts[savedIdx],
@@ -462,8 +497,22 @@ async function enrichReelMetrics(items) {
   return items;
 }
 
-async function getUserReels(userId, cursor = '') {
+async function getUserReels(target, cursor = '') {
+  let userId = target;
+  let username = '';
+  if (target && typeof target === 'object') {
+    userId = target.userId || target.id || '';
+    username = normalizeInstagramUsername(target.username || '');
+  }
+  if (!userId && username) {
+    const info = await getUserInfo(username);
+    userId = info.id;
+    username = info.username || username;
+  }
+  if (!userId) throw new Error('Profile user id is missing');
+
   function resolveUsernameByUserId() {
+    if (username) return username;
     for (const cached of userInfoCache.values()) {
       if (String(cached?.user?.id) === String(userId)) return cached.user.username;
     }
@@ -569,13 +618,6 @@ function findReelsConnection(root) {
 }
 
 async function getTrendingReels(cursor = '') {
-  try {
-    const domResult = await collectInstagramPageReels('https://www.instagram.com/reels/', cursor ? 2 : 4);
-    if (domResult.items.length > 0) return domResult;
-  } catch (error) {
-    console.warn('[Trending] Instagram page agent failed, trying API:', error.message);
-  }
-
   const variables = {
     after: cursor || null,
     before: null,
@@ -597,7 +639,7 @@ async function getTrendingReels(cursor = '') {
 
     if (graphResult && graphResult.media.length > 0) {
       const graphPageInfo = graphResult.connection.page_info || {};
-      const graphItems = await enrichReelMetrics(graphResult.media.map(parseReelItem));
+      const graphItems = graphResult.media.map(parseReelItem);
       return {
         items: graphItems,
         hasMore: !!graphPageInfo.has_next_page,
@@ -625,7 +667,7 @@ async function getTrendingReels(cursor = '') {
         d = await fetchIG(ep.url, 'POST', params.toString());
       } else {
         let url = ep.url;
-        if (cursor) url += `?max_id=${encodeURIComponent(cursor)}`;
+        if (cursor) url += `${url.includes('?') ? '&' : '?'}max_id=${encodeURIComponent(cursor)}`;
         d = await fetchIG(url, 'GET');
       }
 
@@ -672,6 +714,14 @@ async function getTrendingReels(cursor = '') {
     }
   }
 
+  try {
+    const domResult = await collectInstagramPageReels('https://www.instagram.com/reels/', cursor ? 1 : 2);
+    if (domResult.items.length > 0) return domResult;
+  } catch (error) {
+    lastError = lastError || error;
+    console.warn('[Trending] Instagram page agent fallback failed:', error.message);
+  }
+
   // Instagram frequently disables its web Explore endpoints while profile
   // reels remain available. Build a useful feed from saved public accounts.
   if (!cursor) {
@@ -700,21 +750,33 @@ async function getTrendingReels(cursor = '') {
 // в”Ђв”Ђв”Ђ Proxy Avatar в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async function proxyAvatar(avatarUrl) {
   if (!avatarUrl) return '';
+  const cached = avatarCache.get(avatarUrl);
+  if (cached && Date.now() - cached.ts < USER_CACHE_MS) return cached.value;
   try {
     const cookie = await getIGCookies();
     const response = await net.fetch(avatarUrl, {
       headers: {
         'User-Agent': UA,
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
         'Cookie': cookie,
-        'Referer': 'https://www.instagram.com/'
+        'Referer': 'https://www.instagram.com/',
+        'Sec-Fetch-Dest': 'image',
+        'Sec-Fetch-Mode': 'no-cors',
+        'Sec-Fetch-Site': 'cross-site'
       },
       credentials: 'include'
     });
-    if (!response.ok) return '';
+    if (!response.ok) {
+      avatarCache.set(avatarUrl, { ts: Date.now(), value: '' });
+      return '';
+    }
     const buffer = await response.arrayBuffer();
     const contentType = response.headers.get('content-type') || 'image/jpeg';
     const base64 = Buffer.from(buffer).toString('base64');
-    return `data:${contentType};base64,${base64}`;
+    const value = `data:${contentType};base64,${base64}`;
+    avatarCache.set(avatarUrl, { ts: Date.now(), value });
+    if (avatarCache.size > 200) avatarCache.delete(avatarCache.keys().next().value);
+    return value;
   } catch (e) {
     console.error('[Proxy Avatar] Failed:', e.message);
     return '';
@@ -722,6 +784,100 @@ async function proxyAvatar(avatarUrl) {
 }
 
 // в”Ђв”Ђв”Ђ Download Video File в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+function pushUniqueUrl(list, url) {
+  if (url && typeof url === 'string' && /^https?:\/\//i.test(url) && !list.includes(url)) {
+    list.push(url);
+  }
+}
+
+async function getAvatarCandidates(account) {
+  const candidates = [];
+  pushUniqueUrl(candidates, account.avatar);
+
+  let info = null;
+  if (account.username) {
+    try {
+      info = await getUserInfo(account.username);
+      pushUniqueUrl(candidates, info.avatar);
+    } catch (error) {
+      console.warn(`[Profiles] web_profile_info avatar lookup failed for @${account.username}:`, error.message);
+    }
+  }
+
+  const userId = account.userId || account.id || info?.id;
+  if (userId) {
+    try {
+      const data = await fetchIG(`https://i.instagram.com/api/v1/users/${encodeURIComponent(userId)}/info/`, 'GET', null, 0, { ignoreCooldown: true });
+      const user = data?.user || {};
+      pushUniqueUrl(candidates, user.hd_profile_pic_url_info?.url);
+      pushUniqueUrl(candidates, user.profile_pic_url);
+    } catch (error) {
+      console.warn(`[Profiles] users/info avatar lookup failed for @${account.username || userId}:`, error.message);
+    }
+  }
+
+  if (account.username) {
+    try {
+      const data = await fetchIG(`https://www.instagram.com/web/search/topsearch/?query=${encodeURIComponent(account.username)}`, 'GET', null, 0, { ignoreCooldown: true });
+      const found = (data?.users || [])
+        .map(item => item.user || item)
+        .find(item => item?.username?.toLowerCase() === String(account.username).toLowerCase());
+      pushUniqueUrl(candidates, found?.profile_pic_url);
+    } catch (error) {
+      console.warn(`[Profiles] topsearch avatar lookup failed for @${account.username}:`, error.message);
+    }
+  }
+
+  return candidates;
+}
+
+async function getSavedAccountsForUi() {
+  const accounts = getSetting('savedAccounts', []);
+  const output = new Array(accounts.length);
+  let index = 0;
+
+  async function buildAccount(account) {
+    let avatar = account.avatar || '';
+    let proxied = /^data:/i.test(avatar) ? avatar : '';
+    if (!proxied && /^https?:\/\//i.test(avatar)) {
+      proxied = await proxyAvatar(avatar);
+    }
+    if (!proxied && account.username) {
+      try {
+        const candidates = await getAvatarCandidates(account);
+        for (const candidate of candidates) {
+          proxied = await proxyAvatar(candidate);
+          if (proxied) break;
+        }
+        const info = userInfoCache.get(String(account.username).toLowerCase())?.user;
+        return {
+          ...account,
+          fullName: info?.fullName || account.fullName || '',
+          userId: info?.id || account.userId,
+          followers: info?.followers ?? account.followers,
+          following: info?.following ?? account.following,
+          posts: info?.posts ?? account.posts,
+          avatar: proxied || ''
+        };
+      } catch (error) {
+        console.warn(`[Profiles] Avatar refresh failed for @${account.username}:`, error.message);
+      }
+    }
+    return { ...account, avatar: proxied || '' };
+  }
+
+  async function worker() {
+    while (index < accounts.length) {
+      const current = index++;
+      output[current] = await buildAccount(accounts[current]);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(4, accounts.length) }, worker);
+  await Promise.all(workers);
+  return output;
+}
+
 function downloadFile(videoUrl, destPath, reelId) {
   return new Promise((resolve, reject) => {
     const follow = (dlUrl) => {
@@ -884,6 +1040,8 @@ const SHELL_CSS = `
   .sb-profile-item{display:grid;grid-template-columns:36px 1fr auto;gap:8px;align-items:center;padding:9px 10px;border:1px solid #1d1d1d;border-radius:8px;margin-bottom:7px;background:#0f0f0f;cursor:pointer;transition:border-color .12s,background .12s}
   .sb-profile-item:hover{border-color:#333;background:#151515}
   .sb-profile-item img{width:36px;height:36px;border-radius:50%;object-fit:cover;background:#1a1a1a}
+  .sb-profile-avatar{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:#1a1a1a;color:#777;font-size:13px;font-weight:900;overflow:hidden;text-transform:uppercase}
+  .sb-profile-avatar img{width:100%;height:100%;display:block}
   .sb-profile-item strong{display:block;font-size:13px;color:#e8e8e8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .sb-profile-item small{display:block;font-size:11px;color:#666;margin-top:1px}
   .sb-profile-del{border:0;background:transparent;color:#555;font-size:16px;cursor:pointer;padding:2px 6px;border-radius:4px}
@@ -891,7 +1049,8 @@ const SHELL_CSS = `
   .sb-add-form{display:flex;gap:6px;margin-bottom:12px}
   .sb-add-form input{flex:1;background:#111;border:1px solid #2a2a2a;border-radius:7px;padding:8px 10px;color:#e0e0e0;font-size:13px}
   .sb-add-form input::placeholder{color:#444}
-  #seebal-grid-wrap{flex:1;min-width:0;width:100%;max-width:100%;overflow-y:auto;overflow-x:hidden}
+  #seebal-grid-wrap{flex:1;min-width:0;width:100%;max-width:100%;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+  #seebal-grid-wrap::-webkit-scrollbar{width:0;height:0;display:none}
   #seebal-grid{width:100%;max-width:100%;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px;padding:18px;align-content:start;overflow:hidden}
   .sb-card{background:#111;border:1px solid #1e1e1e;border-radius:10px;overflow:hidden;position:relative;cursor:pointer;transition:transform .13s,border-color .13s}
   .sb-card:hover{transform:translateY(-2px);border-color:#3a3a3a}
@@ -992,12 +1151,15 @@ function buildShellJS() {
 
     const st = {
       items: [], cursor: '', loading: false,
+      loadSeq: 0,
       profiles: [],
       hidden: new Set(JSON.parse(localStorage.getItem('sb_hidden') || '[]')),
+      hiddenAuthors: new Set(JSON.parse(localStorage.getItem('sb_hidden_authors') || '[]')),
       activeProfile: null,  // { userId, username } or null
       search: '',
       sort: 'feed',
       limit: 20,
+      visibleLimit: 20,
       loggedIn: false
     };
 
@@ -1027,12 +1189,22 @@ function buildShellJS() {
       if(key==='viral') return viral(it);
       return 0;
     }
-    function filteredItems(){
+    function itemAuthor(it) {
+      return String(it.author?.username || '').toLowerCase();
+    }
+    function isHiddenItem(it) {
+      if (st.hidden.has(it.code)) return true;
+      return !st.activeProfile && st.hiddenAuthors.has(itemAuthor(it));
+    }
+    function filteredItemsRaw(){
       const q=st.search.trim().toLowerCase();
-      let arr=st.items.filter(it => !st.hidden.has(it.code));
+      let arr=st.items.filter(it => !isHiddenItem(it));
       if(q) arr=arr.filter(it => ((it.caption||'')+' '+(it.author?.username||'')).toLowerCase().includes(q));
       if(st.sort !== 'feed') arr=[...arr].sort((a,b)=>metric(b,st.sort)-metric(a,st.sort));
-      return arr.slice(0, st.limit);
+      return arr;
+    }
+    function filteredItems(){
+      return filteredItemsRaw().slice(0, st.visibleLimit);
     }
 
     function cacheKey() {
@@ -1175,7 +1347,7 @@ function buildShellJS() {
     function renderProfiles() {
       profileList.innerHTML = st.profiles.map(p => \`
         <div class="sb-profile-item" data-username="\${esc(p.username)}">
-          <img src="\${esc(p.avatar||'')}" onerror="this.style.display='none'">
+          <div class="sb-profile-avatar">\${p.avatar ? \`<img src="\${esc(p.avatar)}" onerror="this.remove()">\` : esc((p.username||'?').slice(0,1))}</div>
           <div><strong>@\${esc(p.username)}</strong><small>\${esc(p.fullName||'')}</small></div>
           <button class="sb-profile-del" data-del="\${esc(p.username)}">x</button>
         </div>
@@ -1183,13 +1355,25 @@ function buildShellJS() {
     }
 
     async function loadFeed(reset) {
-      if (st.loading) return;
-      if (!(await requireAuth())) return;
+      if (st.loading && !reset) return;
+      const seq = ++st.loadSeq;
+      if (!reset) {
+        const localTotal = filteredItemsRaw().length;
+        if (localTotal > st.visibleLimit) {
+          st.visibleLimit = Math.min(localTotal, st.visibleLimit + st.limit);
+          render();
+          if (!st.cursor || filteredItemsRaw().length > st.visibleLimit) return;
+        }
+      }
       if (!reset && !st.cursor) return;
+      if (!(await requireAuth())) return;
+      if (seq !== st.loadSeq) return;
       st.loading = true;
       count.textContent = 'Loading...';
       if (reset) {
         st.items=[]; st.cursor='';
+        st.visibleLimit = st.limit;
+        if (videoObserver) { videoObserver.disconnect(); videoObserver = null; }
         grid.innerHTML='<div id="seebal-status">Loading...</div><div id="seebal-sentinel"></div>';
         restoreCache();
       }
@@ -1199,35 +1383,43 @@ function buildShellJS() {
           try { data = await fastFeed(st.cursor); } catch { data = null; }
         }
         if (!data) data = await request('SEEBAL_FEED_REQUEST', { cursor: st.cursor, userId: st.activeProfile?.userId||'', username: st.activeProfile?.username||'' });
-        const newItems = (data.items||[]).filter(it => it && it.code && !st.hidden.has(it.code));
+        if (seq !== st.loadSeq) return;
+        const newItems = (data.items||[]).filter(it => it && it.code && !isHiddenItem(it));
         const existing = new Set((reset ? [] : st.items).map(it => it.code));
         const uniqueNew = newItems.filter(it => !existing.has(it.code));
+        if (!reset && uniqueNew.length) st.visibleLimit += st.limit;
         st.items = reset ? uniqueNew : [...st.items, ...uniqueNew];
         st.cursor = data.cursor||'';
         saveCache();
         if (!reset && st.sort === 'feed' && !st.search && uniqueNew.length) {
           const sentinel = document.getElementById('seebal-sentinel');
-          const html = uniqueNew.slice(0, Math.max(0, st.limit - grid.querySelectorAll('.sb-card').length)).map(cardHtml).join('');
+          const html = uniqueNew.slice(0, Math.max(0, st.visibleLimit - grid.querySelectorAll('.sb-card').length)).map(cardHtml).join('');
           if (sentinel) sentinel.insertAdjacentHTML('beforebegin', html);
           else grid.insertAdjacentHTML('beforeend', html + '<div id="seebal-sentinel"></div>');
-          count.textContent = filteredItems().length + ' of ' + st.items.filter(it => !st.hidden.has(it.code)).length + ' reels';
+          count.textContent = filteredItems().length + ' of ' + filteredItemsRaw().length + ' reels';
           bindCardVideoEvents();
           observeSentinel();
         } else {
           render();
         }
       } catch(e) {
+        if (seq !== st.loadSeq) return;
         const status = grid.querySelector('#seebal-status') || Object.assign(document.createElement('div'), {id:'seebal-status'});
         status.textContent = 'Error: ' + (e.message||e);
         if (!status.parentNode) grid.appendChild(status);
         count.textContent = st.items.length + ' reels';
-      } finally { st.loading = false; }
+      } finally {
+        if (seq === st.loadSeq) st.loading = false;
+      }
     }
 
     function render() {
       const items = filteredItems();
-      count.textContent = items.length + ' of ' + st.items.filter(it => !st.hidden.has(it.code)).length + ' reels';
-      grid.innerHTML = items.map(cardHtml).join('') + '<div id="seebal-sentinel"></div>' || '<div id="seebal-status">No reels</div><div id="seebal-sentinel"></div>';
+      count.textContent = items.length + ' of ' + filteredItemsRaw().length + ' reels';
+      if (videoObserver) { videoObserver.disconnect(); videoObserver = null; }
+      grid.innerHTML = items.length
+        ? items.map(cardHtml).join('') + '<div id="seebal-sentinel"></div>'
+        : '<div id="seebal-status">No reels</div><div id="seebal-sentinel"></div>';
       bindCardVideoEvents();
       observeSentinel();
     }
@@ -1237,7 +1429,7 @@ function buildShellJS() {
         const v = viral(it);
         const caption = it.caption || '';
         return \`<div class="sb-card" data-code="\${esc(it.code)}">
-          \${it.videoUrl ? \`<video src="\${esc(it.videoUrl)}" poster="\${esc(it.thumbnailUrl||'')}" preload="metadata" playsinline loop></video>\` : \`<img src="\${esc(it.thumbnailUrl||'')}" loading="lazy">\`}
+          \${it.videoUrl ? \`<video src="\${esc(it.videoUrl)}" poster="\${esc(it.thumbnailUrl||'')}" preload="none" playsinline loop></video>\` : \`<img src="\${esc(it.thumbnailUrl||'')}" loading="lazy">\`}
           <span class="sb-viral">\${v ? esc(v.toFixed(1)+'x') : '1x'}</span>
           <button class="sb-hide" data-hide="\${esc(it.code)}" title="Not interesting">×</button>
           <button class="sb-play" data-play="\${esc(it.code)}">▶</button>
@@ -1260,7 +1452,16 @@ function buildShellJS() {
         </div>\`;
     }
 
+    let videoObserver = null;
     function bindCardVideoEvents(root = grid) {
+      if (!videoObserver) {
+        videoObserver = new IntersectionObserver(entries => {
+          for (const entry of entries) {
+            const video = entry.target;
+            if (!entry.isIntersecting && !video.paused) video.pause();
+          }
+        }, { root: gridWrap, threshold: 0.15 });
+      }
       grid.querySelectorAll('.sb-card video').forEach(video => {
         const card = video.closest('.sb-card');
         if (video.dataset.sbBound) return;
@@ -1268,6 +1469,7 @@ function buildShellJS() {
         video.addEventListener('play', () => card?.classList.add('playing'));
         video.addEventListener('pause', () => card?.classList.remove('playing'));
         video.addEventListener('ended', () => card?.classList.remove('playing'));
+        videoObserver.observe(video);
       });
     }
 
@@ -1277,8 +1479,8 @@ function buildShellJS() {
       if (!sentinel) return;
       if (sentinelObserver) sentinelObserver.disconnect();
       sentinelObserver = new IntersectionObserver(entries => {
-        if (entries.some(entry => entry.isIntersecting) && !st.loading && st.cursor) loadFeed(false);
-      }, { root: gridWrap, rootMargin: '900px 0px 900px 0px' });
+        if (entries.some(entry => entry.isIntersecting) && !st.loading) loadFeed(false);
+      }, { root: gridWrap, rootMargin: '500px 0px 500px 0px' });
       sentinelObserver.observe(sentinel);
     }
 
@@ -1315,10 +1517,11 @@ function buildShellJS() {
         refreshAuth();
       }
       const sortShort = e.target.dataset.sortShort;
-      if (sortShort) { st.sort = sortShort; sortSelect.value = sortShort; render(); }
+      if (sortShort) { st.sort = sortShort; sortSelect.value = sortShort; st.visibleLimit = st.limit; render(); }
       const lim = e.target.dataset.limit;
       if (lim) {
         st.limit = Number(lim);
+        st.visibleLimit = st.limit;
         limitBox.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.limit === lim));
         render();
       }
@@ -1384,8 +1587,16 @@ function buildShellJS() {
 
       const hide = e.target.dataset.hide;
       if (hide) {
+        const hiddenItem = st.items.find(x => x.code === hide);
         st.hidden.add(hide);
         localStorage.setItem('sb_hidden', JSON.stringify([...st.hidden]));
+        if (!st.activeProfile) {
+          const author = itemAuthor(hiddenItem);
+          if (author) {
+            st.hiddenAuthors.add(author);
+            localStorage.setItem('sb_hidden_authors', JSON.stringify([...st.hiddenAuthors]));
+          }
+        }
         render();
       }
 
@@ -1399,12 +1610,22 @@ function buildShellJS() {
       }
     });
 
-    searchInput.addEventListener('input', () => { st.search = searchInput.value; render(); });
-    sortSelect.addEventListener('change', () => { st.sort = sortSelect.value; render(); });
+    let searchTimer = null;
+    searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => { st.search = searchInput.value; st.visibleLimit = st.limit; render(); }, 120);
+    });
+    sortSelect.addEventListener('change', () => { st.sort = sortSelect.value; st.visibleLimit = st.limit; render(); });
 
     // Infinite scroll
+    let scrollQueued = false;
     gridWrap.addEventListener('scroll', () => {
-      if (!st.loading && gridWrap.scrollTop + gridWrap.clientHeight > gridWrap.scrollHeight - 1000) loadFeed(false);
+      if (scrollQueued) return;
+      scrollQueued = true;
+      requestAnimationFrame(() => {
+        scrollQueued = false;
+        if (!st.loading && gridWrap.scrollTop + gridWrap.clientHeight > gridWrap.scrollHeight - 900) loadFeed(false);
+      });
     });
 
     window.addEventListener('message', e => {
@@ -1467,12 +1688,15 @@ function createMainWindow() {
     if (url.startsWith('https://www.instagram.com/') || url.startsWith('https://i.instagram.com/')) return;
     _e.preventDefault(); shell.openExternal(url);
   });
-  mainWindow.on('closed', () => { mainWindow = null; stopAllMonitoring(); });
+  mainWindow.on('closed', () => { mainWindow = null; stopAllMonitoring(); closeInstagramAgentWindow(); });
 }
 
 
 // в”Ђв”Ђв”Ђ IPC Handlers в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 ipcMain.handle('logout', async () => {
+  closeInstagramAgentWindow();
+  userInfoCache.clear();
+  reelMetricsCache.clear();
   await session.defaultSession.clearStorageData({ storages: ['cookies'] });
   return true;
 });
@@ -1554,22 +1778,29 @@ ipcMain.handle('open-download-folder', async () => {
 
 ipcMain.handle('get-download-folder', () => getSetting('downloadFolder', app.getPath('downloads')));
 
-ipcMain.handle('get-saved-accounts', () => getSetting('savedAccounts', []));
+ipcMain.handle('get-saved-accounts', () => getSavedAccountsForUi());
 
 ipcMain.handle('save-account', (_e, account) => {
+  const username = normalizeInstagramUsername(account.username || '');
+  if (!username) throw new Error('Instagram user not found');
   const list = getSetting('savedAccounts', []);
-  if (!list.find(a => a.username === account.username)) {
-    list.push({ ...account, lastUpdated: Date.now() });
-    setSetting('savedAccounts', list);
+  const idx = list.findIndex(a => String(a.username || '').toLowerCase() === username);
+  const next = { ...account, username, lastUpdated: Date.now() };
+  if (idx >= 0) {
+    list[idx] = { ...list[idx], ...next };
+  } else {
+    list.push(next);
   }
+  setSetting('savedAccounts', list);
   return list;
 });
 
 ipcMain.handle('remove-account', (_e, username) => {
+  const normalized = normalizeInstagramUsername(username) || String(username || '').toLowerCase();
   let list = getSetting('savedAccounts', []);
-  list = list.filter(a => a.username !== username);
+  list = list.filter(a => String(a.username || '').toLowerCase() !== normalized);
   setSetting('savedAccounts', list);
-  if (monitorTimers[username]) { clearInterval(monitorTimers[username]); delete monitorTimers[username]; }
+  if (monitorTimers[normalized]) { clearInterval(monitorTimers[normalized]); delete monitorTimers[normalized]; }
   return list;
 });
 
@@ -1587,7 +1818,10 @@ ipcMain.handle('auth:status', () => checkLoggedIn());
 ipcMain.handle('auth:login', () => openLoginWindow());
 ipcMain.handle('feed:recommendations', (_e, cursor) => getTrendingReels(cursor));
 ipcMain.handle('profile:user-info', (_e, username) => getUserInfo(username));
-ipcMain.handle('profile:user-reels', (_e, userId, cursor) => getUserReels(userId, cursor));
+ipcMain.handle('profile:user-reels', (_e, userId, cursor, username) => getUserReels(
+  userId && typeof userId === 'object' ? userId : { userId, username },
+  cursor
+));
 ipcMain.handle('downloads:get-folder', () => getSetting('downloadFolder', app.getPath('downloads')));
 ipcMain.handle('downloads:select-folder', async () => {
   const currentFolder = getSetting('downloadFolder', app.getPath('downloads'));
@@ -1716,6 +1950,7 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   stopAllMonitoring();
+  closeInstagramAgentWindow();
   if (keepaliveTimer) clearInterval(keepaliveTimer);
   app.quit();
 });
